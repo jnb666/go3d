@@ -15,7 +15,7 @@ const sceneFile = "gopher.qml"
 
 var (
 	cameraPos = glu.Polar{R: 2.2, Theta: 60, Phi: 45}
-	camera    = scene.ArcBallCamera(cameraPos, mgl32.Vec3{})
+	camera    = scene.ArcBallCamera(cameraPos, mgl32.Vec3{}, 0, 1, 0, 180)
 	light     = scene.DirectionalLight(mgl32.Vec3{0.8, 0.8, 0.8}, 0.2, cameraPos)
 )
 
@@ -27,7 +27,7 @@ type GopherCube struct {
 }
 
 type ReflectSurface struct {
-	*mesh.Unshaded
+	mesh.Material
 }
 
 func (m ReflectSurface) Enable() *glu.Program {
@@ -38,7 +38,7 @@ func (m ReflectSurface) Enable() *glu.Program {
 	gl.StencilMask(0xFF)
 	gl.DepthMask(false)
 	gl.Clear(GL.STENCIL_BUFFER_BIT)
-	return m.Unshaded.Enable()
+	return m.Material.Enable()
 }
 
 func (m ReflectSurface) Disable() {
@@ -48,7 +48,7 @@ func (m ReflectSurface) Disable() {
 }
 
 type ReflectImage struct {
-	*mesh.Diffuse
+	mesh.Material
 }
 
 func (m ReflectImage) Enable() *glu.Program {
@@ -56,7 +56,7 @@ func (m ReflectImage) Enable() *glu.Program {
 	gl.Enable(GL.STENCIL_TEST)
 	gl.StencilFunc(GL.EQUAL, 1, 0xFF)
 	gl.StencilMask(0x00)
-	return m.Diffuse.Enable()
+	return m.Material.Enable()
 }
 
 func (m ReflectImage) Disable() {
@@ -78,10 +78,10 @@ func (t *GopherCube) initGL(gl *GL.GL) scene.Object {
 	tex := glu.NewTexture2D(GL.CLAMP_TO_EDGE).SetImage(img, true)
 
 	// materials
-	gopher := mesh.NewDiffuseTex(tex)
-	floor := ReflectSurface{mesh.NewUnshaded()}
+	gopher := mesh.DiffuseTex(tex)
+	floor := ReflectSurface{mesh.Unshaded()}
 	floor.SetColor(glu.Black)
-	reflect := ReflectImage{mesh.NewDiffuseTex(tex)}
+	reflect := ReflectImage{mesh.DiffuseTex(tex)}
 	reflect.SetColor(mgl32.Vec4{0.3, 0.3, 0.3, 1})
 
 	// world model

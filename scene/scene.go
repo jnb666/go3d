@@ -143,7 +143,7 @@ func NewItem(msh *mesh.Mesh, mtl mesh.Material) *Item {
 		if msh.PointSize() != 0 {
 			obj.material = mesh.PointMaterial()
 		} else {
-			obj.material = mesh.NewDiffuse()
+			obj.material = mesh.Diffuse()
 		}
 	} else {
 		obj.material = mtl

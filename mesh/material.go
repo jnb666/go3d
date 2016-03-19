@@ -54,17 +54,17 @@ var (
 )
 
 // Unshaded colored material with optional texture
-type Unshaded struct {
+type unshaded struct {
 	*baseMaterial
 }
 
-func NewUnshaded() *Unshaded {
+func Unshaded() Material {
 	m := newMaterial(glu.White)
 	m.prog, _ = getProgram(mUnshaded)
-	return &Unshaded{baseMaterial: m}
+	return &unshaded{baseMaterial: m}
 }
 
-func NewUnshadedTex(tex glu.Texture) *Unshaded {
+func UnshadedTex(tex glu.Texture) Material {
 	m := newMaterial(glu.White)
 	var cached bool
 	switch tex.(type) {
@@ -79,10 +79,10 @@ func NewUnshadedTex(tex glu.Texture) *Unshaded {
 	if !cached {
 		m.prog.Uniform("1i", "tex0")
 	}
-	return &Unshaded{baseMaterial: m}
+	return &unshaded{baseMaterial: m}
 }
 
-func (m *Unshaded) SetColor(c mgl32.Vec4) Material {
+func (m *unshaded) SetColor(c mgl32.Vec4) Material {
 	m.baseMaterial.color = c
 	return m
 }
@@ -100,7 +100,7 @@ func PointMaterial() Material {
 		m.prog.Uniform("v3f", "pointLocation")
 		m.prog.Uniform("1f", "pointSize")
 	}
-	return &Unshaded{baseMaterial: m}
+	return &unshaded{baseMaterial: m}
 }
 
 func (m *pointMaterial) SetColor(col mgl32.Vec4) Material {
@@ -109,30 +109,30 @@ func (m *pointMaterial) SetColor(col mgl32.Vec4) Material {
 }
 
 // Emissive material which looks like it glows
-func Emissive() *Unshaded {
+func Emissive() Material {
 	m := newMaterial(glu.White)
 	m.prog, _ = getProgram(mEmissiveShader)
-	return &Unshaded{baseMaterial: m}
+	return &unshaded{baseMaterial: m}
 }
 
 // Skybox using a cubemap texture
-func Skybox() *Unshaded {
+func Skybox() Material {
 	tex := getTextureCube(tSkybox, "skybox")
-	return NewUnshadedTex(tex)
+	return UnshadedTex(tex)
 }
 
 // Diffuse colored material with optional texture
-type Diffuse struct {
+type diffuse struct {
 	*baseMaterial
 }
 
-func NewDiffuse() *Diffuse {
+func Diffuse() Material {
 	m := newMaterial(glu.White)
 	m.prog, _ = getProgram(mDiffuse)
-	return &Diffuse{baseMaterial: m}
+	return &diffuse{baseMaterial: m}
 }
 
-func NewDiffuseTex(tex glu.Texture) *Diffuse {
+func DiffuseTex(tex glu.Texture) Material {
 	m := newMaterial(glu.White)
 	var cached bool
 	switch tex.(type) {
@@ -147,35 +147,35 @@ func NewDiffuseTex(tex glu.Texture) *Diffuse {
 	if !cached {
 		m.prog.Uniform("1i", "tex0")
 	}
-	return &Diffuse{baseMaterial: m}
+	return &diffuse{baseMaterial: m}
 }
 
-func (m *Diffuse) SetColor(c mgl32.Vec4) Material {
+func (m *diffuse) SetColor(c mgl32.Vec4) Material {
 	m.baseMaterial.color = c
 	return m
 }
 
 // Earth cubemap
-func Earth() *Diffuse {
+func Earth() Material {
 	tex := getTextureCube(tEarth, "earth")
-	return NewDiffuseTex(tex)
+	return DiffuseTex(tex)
 }
 
 // Reflective material with optional texture
-type Reflective struct {
+type reflective struct {
 	*baseMaterial
 	specular     mgl32.Vec3
 	shininess    float32
 	ambientScale float32
 }
 
-func NewReflective(specular mgl32.Vec4, shininess float32) *Reflective {
+func Reflective(specular mgl32.Vec4, shininess float32) Material {
 	m := newMaterial(glu.White)
 	var cached bool
 	if m.prog, cached = getProgram(mBlinnPhong); !cached {
 		initReflective(m.prog)
 	}
-	return &Reflective{
+	return &reflective{
 		baseMaterial: m,
 		specular:     specular.Vec3(),
 		shininess:    shininess,
@@ -183,7 +183,7 @@ func NewReflective(specular mgl32.Vec4, shininess float32) *Reflective {
 	}
 }
 
-func NewReflectiveTex(specular mgl32.Vec4, shininess float32, tex glu.Texture) *Reflective {
+func ReflectiveTex(specular mgl32.Vec4, shininess float32, tex glu.Texture) Material {
 	m := newMaterial(glu.White)
 	var cached bool
 	switch tex.(type) {
@@ -199,7 +199,7 @@ func NewReflectiveTex(specular mgl32.Vec4, shininess float32, tex glu.Texture) *
 		initReflective(m.prog)
 		m.prog.Uniform("1i", "tex0")
 	}
-	return &Reflective{
+	return &reflective{
 		baseMaterial: m,
 		specular:     specular.Vec3(),
 		shininess:    shininess,
@@ -212,12 +212,12 @@ func initReflective(prog *glu.Program) {
 	prog.Uniform("1f", "shininess", "ambientScale")
 }
 
-func (m *Reflective) SetColor(c mgl32.Vec4) Material {
+func (m *reflective) SetColor(c mgl32.Vec4) Material {
 	m.baseMaterial.color = c
 	return m
 }
 
-func (m *Reflective) Enable() *glu.Program {
+func (m *reflective) Enable() *glu.Program {
 	prog := m.baseMaterial.Enable()
 	prog.Set("ambientScale", m.ambientScale)
 	prog.Set("specularColor", m.specular)
@@ -226,19 +226,19 @@ func (m *Reflective) Enable() *glu.Program {
 }
 
 // Shiny plastic like material
-func Plastic() *Reflective {
-	return NewReflective(mgl32.Vec4{0.8, 0.8, 0.8, 1}, 128)
+func Plastic() Material {
+	return Reflective(mgl32.Vec4{0.8, 0.8, 0.8, 1}, 128)
 }
 
 // Glass is reflective and has transparency
-func Glass() *Reflective {
-	mat := NewReflective(mgl32.Vec4{0.7, 0.7, 0.7, 1}, 64)
+func Glass() Material {
+	mat := Reflective(mgl32.Vec4{0.7, 0.7, 0.7, 1}, 64)
 	mat.SetColor(mgl32.Vec4{1, 1, 1, 0.4})
 	return mat
 }
 
 // 3d Textured wood material
-func Wood() *Reflective {
+func Wood() Material {
 	m := newMaterial(glu.White)
 	var cached bool
 	if m.prog, cached = getProgram(mWoodShader); !cached {
@@ -246,7 +246,7 @@ func Wood() *Reflective {
 		m.prog.Uniform("1i", "tex0", "tex1")
 	}
 	m.tex = append(m.tex, getTexture(tWood), getTexture(tTurbulence))
-	return &Reflective{
+	return &reflective{
 		baseMaterial: m,
 		specular:     mgl32.Vec3{0.5, 0.5, 0.5},
 		shininess:    10,
@@ -255,7 +255,7 @@ func Wood() *Reflective {
 }
 
 // Rough randomly textured material
-func Rough() *Reflective {
+func Rough() Material {
 	m := newMaterial(glu.White)
 	var cached bool
 	if m.prog, cached = getProgram(mRoughShader); !cached {
@@ -263,7 +263,7 @@ func Rough() *Reflective {
 		m.prog.Uniform("1i", "tex0")
 	}
 	m.tex = append(m.tex, getTexture(tTurbulence))
-	return &Reflective{
+	return &reflective{
 		baseMaterial: m,
 		specular:     mgl32.Vec3{0.5, 0.5, 0.5},
 		shininess:    32,
@@ -272,7 +272,7 @@ func Rough() *Reflective {
 }
 
 // Marble textured material
-func Marble() *Reflective {
+func Marble() Material {
 	m := newMaterial(glu.White)
 	var cached bool
 	if m.prog, cached = getProgram(mMarbleShader); !cached {
@@ -280,7 +280,7 @@ func Marble() *Reflective {
 		m.prog.Uniform("1i", "tex0")
 	}
 	m.tex = append(m.tex, getTexture(tTurbulence))
-	return &Reflective{
+	return &reflective{
 		baseMaterial: m,
 		specular:     mgl32.Vec3{0.8, 0.8, 0.8},
 		shininess:    200,

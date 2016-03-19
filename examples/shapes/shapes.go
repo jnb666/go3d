@@ -63,10 +63,10 @@ func (t *Shapes) initialise() {
 		"glass":       mesh.Glass(),
 		"earth":       mesh.Earth(),
 		"emissive":    mesh.Emissive().SetColor(mgl32.Vec4{0.95, 0.82, 0.25, 1}),
-		"diffuse":     mesh.NewDiffuse().SetColor(glu.Red),
-		"unshaded":    mesh.NewUnshaded().SetColor(glu.Red),
-		"texture2d":   mesh.NewReflectiveTex(spec, 32, tex2d),
-		"texturecube": mesh.NewReflectiveTex(spec, 32, texCube),
+		"diffuse":     mesh.Diffuse().SetColor(glu.Red),
+		"unshaded":    mesh.Unshaded().SetColor(glu.Red),
+		"texture2d":   mesh.ReflectiveTex(spec, 32, tex2d),
+		"texturecube": mesh.ReflectiveTex(spec, 32, texCube),
 		"point":       mesh.PointMaterial().SetColor(glu.Red),
 	}
 	mat := t.material[t.matName]
