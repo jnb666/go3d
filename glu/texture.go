@@ -13,6 +13,7 @@ import (
 	"math"
 	"os"
 	"path"
+	"strings"
 )
 
 type ImageFormat int
@@ -224,6 +225,14 @@ func GetFormat(name string) ImageFormat {
 
 // get an image in NRGBA format
 func getImage(r io.Reader, format ImageFormat, hasGamma bool, name string) (pix []uint8, bounds image.Rectangle, err error) {
+	// did we save a copy before?
+	base := strings.Split(path.Base(name), ".")[0]
+	tempfile := path.Join(os.TempDir(), base+"_rgb.png")
+	if tmp, err := os.Open(tempfile); err == nil {
+		r = tmp
+		format = PngFormat
+		hasGamma = false
+	}
 	var img image.Image
 	switch format {
 	case UnknownFormat:
@@ -255,7 +264,12 @@ func getImage(r io.Reader, format ImageFormat, hasGamma bool, name string) (pix 
 	}
 	draw.Draw(dst, bounds, img, image.ZP, draw.Src)
 	pix = dst.Pix
-	return
+	// save a copy of the output image
+	if out, err := os.Create(tempfile); err == nil {
+		png.Encode(out, dst)
+		out.Close()
+	}
+	return pix, bounds, nil
 }
 
 // image converter to linearise image which is in srgba format

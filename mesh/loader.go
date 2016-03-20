@@ -16,9 +16,8 @@ var spaces = regexp.MustCompile("[ \t\r]+")
 
 type objData struct {
 	*Mesh
-	mtl     Material
-	grpName string
 	mtlName string
+	grpName string
 }
 
 // Create a new mesh and associated materials from a .obj file
@@ -62,9 +61,7 @@ func LoadObj(r io.Reader) (m *Mesh, err error) {
 		case "mtllib":
 			_, err = LoadMtlFile(flds[1])
 		case "usemtl":
-			if obj.mtl, err = LoadMaterial(flds[1]); err == nil {
-				obj.mtlName = flds[1]
-			}
+			obj.mtlName = flds[1]
 		default:
 			fmt.Printf("LoadObj: skip %s\n", line)
 		}
@@ -81,7 +78,7 @@ func LoadObj(r io.Reader) (m *Mesh, err error) {
 
 func (o *objData) build(next string) {
 	if o.grpName != "" || next == "__END" {
-		o.Mesh.Build(o.mtl)
+		o.Mesh.Build(o.mtlName)
 		size := len(o.Mesh.groups[len(o.Mesh.groups)-1].edata)
 		fmt.Printf("group %s with material %s - %d elements\n", o.grpName, o.mtlName, size)
 	}
@@ -145,7 +142,8 @@ func LoadMtl(r io.Reader) (names []string, err error) {
 		switch flds[0] {
 		case "newmtl":
 			if m != nil {
-				names = append(names, m.save())
+				saveMaterialData(m)
+				names = append(names, m.name)
 			}
 			m = newMtlData(flds[1])
 		case "Ka":
@@ -178,7 +176,10 @@ func LoadMtl(r io.Reader) (names []string, err error) {
 	if err = scanner.Err(); err != nil {
 		panic(err)
 	}
-	names = append(names, m.save())
+	if m != nil {
+		saveMaterialData(m)
+		names = append(names, m.name)
+	}
 	return names, err
 }
 
@@ -206,16 +207,15 @@ func newMtlData(name string) *mtlData {
 	}
 }
 
-func (m *mtlData) save() string {
-	var mtl Material
-	color := m.diffuse.Vec4(m.alpha)
+func (m mtlData) toMaterial() (mtl Material, err error) {
 	var tex glu.Texture
-	var err error
 	if m.diffuseMap != "" {
-		if tex, err = glu.NewTexture2D(false, true).SetImageFile(m.diffuseMap); err != nil {
-			panic(err)
+		tex, err = glu.NewTexture2D(false, true).SetImageFile(m.diffuseMap)
+		if err != nil {
+			return nil, fmt.Errorf("toMaterial: error loading texture for material %s: %s", m.name, err)
 		}
 	}
+	color := m.diffuse.Vec4(m.alpha)
 	ambScale := m.ambient.Vec4(1).Len() / m.diffuse.Vec4(1).Len()
 	switch m.model {
 	case 0:
@@ -226,11 +226,10 @@ func (m *mtlData) save() string {
 	case 2:
 		mtl = ReflectiveTex(m.specular.Vec4(m.alpha), m.shininess, tex)
 	default:
-		panic(fmt.Errorf("LoadMtl: illumination model %d not supported\n", m.model))
+		panic(fmt.Errorf("toMaterial: illumination model %d not supported\n", m.model))
 	}
 	mtl.SetColor(color).SetAmbient(ambScale)
-	SaveMaterial(m.name, mtl)
-	return m.name
+	return mtl, nil
 }
 
 func parse3fv(flds []string) (v mgl32.Vec3) {

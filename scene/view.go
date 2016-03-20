@@ -35,7 +35,7 @@ func NewView(camera Camera) *View {
 // Draw the scene with the given view matrix
 func (v *View) Draw(worldToCamera mgl32.Mat4, scene Object) {
 	scene.Do(NewTransform(worldToCamera), func(o *Item, t Transform) {
-		o.Mesh.Draw(func(prog *glu.Program) {
+		err := o.Mesh.Draw(func(prog *glu.Program) {
 			mat := t.Mat4
 			if psize := o.Mesh.PointSize(); psize != 0 {
 				// points are always facing the camera at a constant size
@@ -58,6 +58,10 @@ func (v *View) Draw(worldToCamera mgl32.Mat4, scene Object) {
 			prog.Set("cameraToClip", v.Proj)
 			prog.Set("modelToCamera", mat)
 		})
+		if err != nil {
+			// seems better to panic as caller might otherwise skip checking the error
+			panic(err)
+		}
 	})
 }
 

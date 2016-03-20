@@ -9,6 +9,7 @@ import (
 	"gopkg.in/qml.v1"
 	"gopkg.in/qml.v1/gl/es2"
 	"os"
+	"sync"
 )
 
 const sceneFile = "shapes.qml"
@@ -27,11 +28,13 @@ type mouseInfo struct {
 
 type Shapes struct {
 	qml.Object
+	setModel   string
 	modelName  string
 	models     map[string]scene.Object
 	background scene.Object
 	view       *scene.View
 	mouse      mouseInfo
+	loading    sync.Mutex
 }
 
 func (t *Shapes) initialise(gl *GL.GL) {
@@ -40,19 +43,22 @@ func (t *Shapes) initialise(gl *GL.GL) {
 	t.view = scene.NewView(camera).AddLight(light)
 	t.background = scene.NewItem(mesh.Cube().Invert().SetMaterial(mesh.Skybox())).Enable(false)
 	t.background.Scale(40, 40, 40)
-	t.modelName = "cube"
 	t.models = map[string]scene.Object{}
+	t.setModel = "cube"
+	t.loadMesh(t.setModel)
 }
 
 func (t *Shapes) loadMesh(name string) {
 	if _, loaded := t.models[name]; loaded {
+		t.modelName = name
 		return
 	}
+	fmt.Println("load mesh", name)
 	model, err := mesh.LoadObjFile(name + ".obj")
 	if err != nil {
 		fmt.Printf("error loading %s: %v\n", name, err)
 	}
-	switch t.modelName {
+	switch name {
 	case "cube":
 		t.models[name] = scene.NewItem(model)
 	case "teapot":
@@ -66,10 +72,15 @@ func (t *Shapes) loadMesh(name string) {
 	case "sponza":
 		t.models[name] = scene.NewItem(model).Scale(0.5, 0.5, 0.5).Translate(0.5, -1, 0)
 	}
+	t.modelName = name
 }
 
 func (t *Shapes) SetModel(name string) {
-	t.modelName = name
+	if name == "" {
+		return
+	}
+	fmt.Println("set model", name)
+	t.setModel = name
 	t.Call("update")
 }
 
@@ -114,7 +125,16 @@ func (t *Shapes) Paint(p *qml.Painter) {
 	if t.models == nil {
 		t.initialise(gl)
 	}
-	t.loadMesh(t.modelName)
+	if t.setModel != t.modelName {
+		t.loading.Lock()
+		// model loading can take a long time so do it in the background
+		go func() {
+			t.loadMesh(t.setModel)
+			t.loading.Unlock()
+			t.Call("update")
+		}()
+	}
+	//fmt.Println("paint", t.modelName)
 	t.view.SetProjection(t.Int("width"), t.Int("height"))
 	glu.Clear(mgl32.Vec4{0.5, 0.5, 1, 1})
 	view := t.view.Camera.ViewMatrix()

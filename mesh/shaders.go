@@ -57,6 +57,9 @@ varying vec3 ModelPos;
 #define GAMMA 2.2
 
 uniform vec4 objectColor;
+uniform vec3 specularColor;
+uniform float shininess;
+uniform float ambientScale;
 uniform int numLights;
 uniform vec4 lightPos[MAX_LIGHTS];
 uniform vec4 lightCol[MAX_LIGHTS];
@@ -127,18 +130,15 @@ vec3 diffuseLighting(in vec3 vertexNormal, in vec3 objColor) {
 			float att = attenuation(lightPos[i].w, CameraSpacePos, lightPos[i].xyz, lightDir);
 			intensity = att * lightCol[i].xyz;
 		}
+		float ambient = lightCol[i].w * ambientScale;
 		float diffuse = max(dot(norm, lightDir), 0.0);
-		color += objColor * intensity * (lightCol[i].w + diffuse);
+		color += objColor * intensity * (ambient + diffuse);
 	}
 	return color;
 }
 `
 
 var blinnPhongLighting = `
-uniform vec3 specularColor;
-uniform float shininess;
-uniform float ambientScale;
-
 vec3 blinnPhongLighting(in vec3 vertexNormal, in vec3 objColor) {
 	vec3 color = vec3(0);
 	vec3 norm = normalize(vertexNormal);
@@ -155,8 +155,9 @@ vec3 blinnPhongLighting(in vec3 vertexNormal, in vec3 objColor) {
 			intensity = att * lightCol[i].xyz;
 		}
 		// diffuse component
+		float ambient = lightCol[i].w * ambientScale;		
 		float diffuse = max(dot(norm, lightDir), 0.0);
-		color += objColor * intensity * (lightCol[i].w + diffuse);
+		color += objColor * intensity * (ambient + diffuse);
 		// specular highlight
 		vec3 viewDir = normalize(-CameraSpacePos);
 		vec3 halfAngle = normalize(lightDir + viewDir);

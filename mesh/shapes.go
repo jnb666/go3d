@@ -48,7 +48,7 @@ func Point(pointSize int) *Mesh {
 	m.AddTexCoord(1, 0)
 	m.AddNormal(0, 0, 1)
 	m.AddFace(El{4, 1, 1}, El{3, 2, 1}, El{2, 3, 1}, El{1, 4, 1})
-	m.Build(nil)
+	m.Build("")
 	cache[key{mPoint, 0}] = m
 	return m
 }
@@ -70,7 +70,7 @@ func Plane() *Mesh {
 	m.AddTexCoord(1, 0)
 	m.AddNormal(0, 1, 0)
 	m.AddFace(El{1, 1, 1}, El{2, 2, 1}, El{3, 3, 1}, El{4, 4, 1})
-	m.Build(nil)
+	m.Build("")
 	cache[key{mPlane, 0}] = m
 	return m
 }
@@ -106,7 +106,7 @@ func Cube() *Mesh {
 	m.AddFace(El{4, 1, 4}, El{8, 2, 4}, El{5, 3, 4}, El{1, 4, 4})
 	m.AddFace(El{2, 1, 5}, El{6, 2, 5}, El{7, 3, 5}, El{3, 4, 5})
 	m.AddFace(El{6, 1, 6}, El{5, 2, 6}, El{8, 3, 6}, El{7, 4, 6})
-	m.Build(nil)
+	m.Build("")
 	cache[key{mCube, 0}] = m
 	return m
 }
@@ -144,7 +144,7 @@ func Prism() *Mesh {
 	// ends
 	m.AddFace(El{2, 3, 4}, El{5, 5, 4}, El{1, 2, 4})
 	m.AddFace(El{4, 3, 5}, El{6, 5, 5}, El{3, 2, 5})
-	m.Build(nil)
+	m.Build("")
 	cache[key{mPrism, 0}] = m
 	return m
 }
@@ -182,7 +182,7 @@ func doCircle(m *Mesh, pts []mgl32.Vec2, y, yNormal float32) {
 			m.AddFace(centre, El{ix + 2, ix + 2, 1}, El{prev, prev, 1})
 		}
 	}
-	m.Build(nil)
+	m.Build("")
 	m.Clear()
 }
 
@@ -224,7 +224,7 @@ func Cylinder(segments int) *Mesh {
 	m.AddTexCoord(0, 1)
 	m.AddTexCoord(0, 0)
 	m.AddFace(El{-2, -3, -1}, El{-1, -4, -1}, El{2, -2, 1}, El{1, -1, 1})
-	m.Build(nil)
+	m.Build("")
 	cache[key{mCylinder, segments}] = m
 	return m
 }
@@ -273,7 +273,7 @@ func Cone(segments int) *Mesh {
 	} else {
 		m.AddFace(El{-1, -2, -1}, El{1, -1, -1}, El{2, 2, 1})
 	}
-	m.Build(nil)
+	m.Build("")
 	cache[key{mCone, segments}] = m
 	return m
 }
@@ -287,7 +287,7 @@ func Icosohedron() *Mesh {
 	m = New()
 	faces := doIcosohedron(m)
 	m.addElementTriangles(faces)
-	m.Build(nil)
+	m.Build("")
 	cache[key{mIcosohedron, 0}] = m
 	return m
 }
@@ -346,7 +346,7 @@ func Sphere(recursionLevel int) *Mesh {
 		faces = faces2
 	}
 	m.addElementTriangles(faces)
-	m.Build(nil)
+	m.Build("")
 	cache[key{mSphere, recursionLevel}] = m
 	return m
 }

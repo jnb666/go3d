@@ -32,7 +32,7 @@ type El struct {
 type Mesh struct {
 	inverted  int
 	vdata     []float32
-	groups    []meshGroup
+	groups    []*meshGroup
 	varray    [2]*glu.VertexArray
 	vertices  []mgl32.Vec3
 	normals   []mgl32.Vec3
@@ -44,9 +44,10 @@ type Mesh struct {
 }
 
 type meshGroup struct {
-	mtl    Material
-	edata  []uint32
-	earray *glu.VertexArray
+	mtlName string
+	edata   []uint32
+	mtl     Material
+	earray  *glu.VertexArray
 }
 
 type normalCache struct {
@@ -57,7 +58,7 @@ type normalCache struct {
 
 // NewMesh creates a new empty mesh structure
 func New() *Mesh {
-	return &Mesh{ncache: newNormalCache(), groups: []meshGroup{}}
+	return &Mesh{ncache: newNormalCache(), groups: []*meshGroup{}}
 }
 
 func newNormalCache() normalCache {
@@ -84,7 +85,7 @@ func (m *Mesh) Clone() *Mesh {
 	newMesh.varray = m.varray
 	newMesh.pointSize = m.pointSize
 	for _, grp := range m.groups {
-		newMesh.groups = append(newMesh.groups, meshGroup{mtl: grp.mtl.Clone(), edata: grp.edata, earray: grp.earray})
+		newMesh.groups = append(newMesh.groups, &meshGroup{mtl: grp.mtl.Clone(), edata: grp.edata, earray: grp.earray})
 	}
 	return newMesh
 }
@@ -187,13 +188,13 @@ func (n normalCache) build(m *Mesh) {
 
 // Build method processes the data which has been added so far and appends it to the vertex and element buffers.
 // It can be called multiple times to add multiple groups of data.
-func (m *Mesh) Build(mtl Material) {
-	grp := meshGroup{mtl: mtl}
-	if grp.mtl == nil {
+func (m *Mesh) Build(materialName string) {
+	grp := &meshGroup{mtlName: materialName}
+	if grp.mtlName == "" {
 		if m.pointSize != 0 {
-			grp.mtl = PointMaterial()
+			grp.mtlName = "point"
 		} else {
-			grp.mtl = Diffuse()
+			grp.mtlName = "diffuse"
 		}
 	}
 	m.ncache.build(m)
@@ -209,7 +210,6 @@ func (m *Mesh) Build(mtl Material) {
 		grp.edata = append(grp.edata, index)
 	}
 	//fmt.Printf("mesh group %d: %d vertices, %d elements\n", len(m.groups), len(m.vdata)/vertexSize, len(grp.edata))
-	grp.earray = glu.ElementArrayBuffer(grp.edata)
 	m.groups = append(m.groups, grp)
 	m.elements = nil
 	m.faces = 0
@@ -217,14 +217,25 @@ func (m *Mesh) Build(mtl Material) {
 
 // Draw method draws the mesh by calling GL DrawElements, setUniforms callback can be used to set uniforms after
 // binding the vertex arrays and enabling the shaders, but prior to drawing.
-func (m *Mesh) Draw(setUniforms func(*glu.Program)) {
+func (m *Mesh) Draw(setUniforms func(*glu.Program)) error {
 	if m.varray[m.inverted] == nil {
 		m.varray[m.inverted] = glu.ArrayBuffer(m.vdata, vertexSize)
+	} else {
+		m.varray[m.inverted].Enable()
 	}
 	var lastProg *glu.Program
-	m.varray[m.inverted].Enable()
+	var err error
 	for _, grp := range m.groups {
-		grp.earray.Enable()
+		if grp.earray == nil {
+			grp.earray = glu.ElementArrayBuffer(grp.edata)
+		} else {
+			grp.earray.Enable()
+		}
+		if grp.mtl == nil {
+			if grp.mtl, err = LoadMaterial(grp.mtlName); err != nil {
+				return err
+			}
+		}
 		prog := grp.mtl.Enable()
 		if prog != lastProg {
 			setUniforms(prog)
@@ -233,6 +244,7 @@ func (m *Mesh) Draw(setUniforms func(*glu.Program)) {
 		grp.earray.Draw(GL.TRIANGLES, winding[m.inverted])
 		grp.mtl.Disable()
 	}
+	return nil
 }
 
 // Invert method reverses the normals and winding order to flip the shape inside out
@@ -259,8 +271,8 @@ func (m *Mesh) Material() Material {
 
 // Update all the materials associated with this mesh.
 func (m *Mesh) SetMaterial(mtl Material) *Mesh {
-	for i := range m.groups {
-		m.groups[i].mtl = mtl
+	for _, grp := range m.groups {
+		grp.mtl = mtl
 	}
 	return m
 }
