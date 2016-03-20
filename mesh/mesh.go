@@ -19,7 +19,6 @@ var vertexLayout = []glu.Attrib{
 
 var vertexLayoutPoints = []glu.Attrib{
 	{Name: "position", Size: 3, Offset: 0},
-	//	{Name: "texcoord", Size: 2, Offset: 6},
 }
 
 var winding = [2]glbase.Enum{GL.CW, GL.CCW}
@@ -62,7 +61,8 @@ func newNormalCache() normalCache {
 	return normalCache{vert2norm: map[int]*runningMean{}, elem2vert: map[int]int{}}
 }
 
-// Clear method wipes the stored vertex data
+// Clear method wipes the stored vertex data. It does not erase groups which are already built, call this after Build
+// if you need to add a new set of vertices separate to the previous ones.
 func (m *Mesh) Clear() *Mesh {
 	m.vertices = nil
 	m.normals = nil
@@ -108,41 +108,48 @@ func (m *Mesh) AddTexCoord(tx, ty float32) int {
 	return len(m.texcoords)
 }
 
-// Add a triangular face
-func (m *Mesh) AddFace(f1, f2, f3 El) int {
-	if f1.Norm == 0 || f2.Norm == 0 || f3.Norm == 0 {
-		// calculate face normal
-		v1, v2, v3 := m.vertex(f1.Vert), m.vertex(f2.Vert), m.vertex(f3.Vert)
-		normal := v2.Sub(v1).Cross(v3.Sub(v1)).Normalize()
-		m.ncache.add(normal, len(m.elements), f1, f2, f3)
+// Add a triangular or a quad face
+func (m *Mesh) AddFace(el ...El) int {
+	if len(el) != 3 && len(el) != 4 {
+		panic("AddFace must have 3 or 4 elements")
 	}
-	m.elements = append(m.elements, f1, f2, f3)
-	return len(m.elements)
-}
-
-// Add a quad face
-func (m *Mesh) AddFaceQuad(f1, f2, f3, f4 El) int {
-	if f1.Norm == 0 || f2.Norm == 0 || f3.Norm == 0 || f4.Norm == 0 {
-		// calculate face normal using Newells method
-		vn := mgl32.Vec3{}
-		verts := []mgl32.Vec3{m.vertex(f1.Vert), m.vertex(f2.Vert), m.vertex(f3.Vert), m.vertex(f4.Vert)}
-		for i, v := range verts {
-			v1 := verts[(i+1)%4]
-			vn = vn.Add(mgl32.Vec3{
-				(v[1] - v1[1]) * (v[2] + v1[2]),
-				(v[2] - v1[2]) * (v[0] + v1[0]),
-				(v[0] - v1[0]) * (v[1] + v1[1]),
-			})
+	calcNormal := false
+	vtx := make([]mgl32.Vec3, len(el))
+	for i, e := range el {
+		if e.Norm == 0 {
+			calcNormal = true
 		}
-		normal := vn.Normalize()
-		m.ncache.add(normal, len(m.elements), f1, f2, f3, f3, f4, f1)
+		vtx[i] = m.vertex(e.Vert)
 	}
-	m.elements = append(m.elements, f1, f2, f3, f3, f4, f1)
+	var elements []El
+	if len(el) == 3 {
+		elements = []El{el[0], el[1], el[2]}
+	} else {
+		elements = []El{el[0], el[1], el[2], el[2], el[3], el[0]}
+	}
+	if calcNormal {
+		// calculate face normal
+		var normal mgl32.Vec3
+		if len(el) == 3 {
+			normal = vtx[1].Sub(vtx[0]).Cross(vtx[2].Sub(vtx[0]))
+		} else {
+			for i, v := range vtx {
+				v1 := vtx[(i+1)%4]
+				normal = normal.Add(mgl32.Vec3{
+					(v[1] - v1[1]) * (v[2] + v1[2]),
+					(v[2] - v1[2]) * (v[0] + v1[0]),
+					(v[0] - v1[0]) * (v[1] + v1[1]),
+				})
+			}
+		}
+		m.ncache.add(normal.Normalize(), len(m.elements), elements)
+	}
+	m.elements = append(m.elements, elements...)
 	return len(m.elements)
 }
 
 // update the average normal at each vertex
-func (n normalCache) add(normal mgl32.Vec3, base int, elements ...El) {
+func (n normalCache) add(normal mgl32.Vec3, base int, elements []El) {
 	for i, el := range elements {
 		if n.vert2norm[el.Vert] == nil {
 			n.vert2norm[el.Vert] = &runningMean{}
@@ -189,7 +196,8 @@ func (m *Mesh) Build(mtl Material) {
 	m.groups = append(m.groups, grp)
 }
 
-// Draw method draws the mesh by calling GL DrawElements, pre and post callback functions are called pre and post drawing.
+// Draw method draws the mesh by calling GL DrawElements, setUniforms callback can be used to set uniforms after
+// binding the vertex arrays and enabling the shaders, but prior to drawing.
 func (m *Mesh) Draw(setUniforms func(*glu.Program)) {
 	if m.varray[m.inverted] == nil {
 		m.varray[m.inverted] = glu.ArrayBuffer(m.vdata, vertexSize)

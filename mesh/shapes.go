@@ -47,7 +47,7 @@ func Point(pointSize int) *Mesh {
 	m.AddTexCoord(1, 1)
 	m.AddTexCoord(1, 0)
 	m.AddNormal(0, 0, 1)
-	m.AddFaceQuad(El{4, 1, 1}, El{3, 2, 1}, El{2, 3, 1}, El{1, 4, 1})
+	m.AddFace(El{4, 1, 1}, El{3, 2, 1}, El{2, 3, 1}, El{1, 4, 1})
 	m.Build(nil)
 	cache[key{mPoint, 0}] = m
 	return m
@@ -69,7 +69,7 @@ func Plane() *Mesh {
 	m.AddTexCoord(1, 1)
 	m.AddTexCoord(1, 0)
 	m.AddNormal(0, 1, 0)
-	m.AddFaceQuad(El{1, 1, 1}, El{2, 2, 1}, El{3, 3, 1}, El{4, 4, 1})
+	m.AddFace(El{1, 1, 1}, El{2, 2, 1}, El{3, 3, 1}, El{4, 4, 1})
 	m.Build(nil)
 	cache[key{mPlane, 0}] = m
 	return m
@@ -100,12 +100,12 @@ func Cube() *Mesh {
 	m.AddNormal(0, 0, -1)
 	m.AddNormal(0, 0, 1)
 	m.AddNormal(0, -1, 0)
-	m.AddFaceQuad(El{1, 1, 1}, El{2, 2, 1}, El{3, 3, 1}, El{4, 4, 1})
-	m.AddFaceQuad(El{1, 1, 2}, El{5, 2, 2}, El{6, 3, 2}, El{2, 4, 2})
-	m.AddFaceQuad(El{3, 1, 3}, El{7, 2, 3}, El{8, 3, 3}, El{4, 4, 3})
-	m.AddFaceQuad(El{4, 1, 4}, El{8, 2, 4}, El{5, 3, 4}, El{1, 4, 4})
-	m.AddFaceQuad(El{2, 1, 5}, El{6, 2, 5}, El{7, 3, 5}, El{3, 4, 5})
-	m.AddFaceQuad(El{6, 1, 6}, El{5, 2, 6}, El{8, 3, 6}, El{7, 4, 6})
+	m.AddFace(El{1, 1, 1}, El{2, 2, 1}, El{3, 3, 1}, El{4, 4, 1})
+	m.AddFace(El{1, 1, 2}, El{5, 2, 2}, El{6, 3, 2}, El{2, 4, 2})
+	m.AddFace(El{3, 1, 3}, El{7, 2, 3}, El{8, 3, 3}, El{4, 4, 3})
+	m.AddFace(El{4, 1, 4}, El{8, 2, 4}, El{5, 3, 4}, El{1, 4, 4})
+	m.AddFace(El{2, 1, 5}, El{6, 2, 5}, El{7, 3, 5}, El{3, 4, 5})
+	m.AddFace(El{6, 1, 6}, El{5, 2, 6}, El{8, 3, 6}, El{7, 4, 6})
 	m.Build(nil)
 	cache[key{mCube, 0}] = m
 	return m
@@ -137,10 +137,10 @@ func Prism() *Mesh {
 	m.AddNormal(-1, 0, 0)
 	m.AddNormal(1, 0, 0)
 	// base
-	m.AddFaceQuad(El{2, 1, 1}, El{1, 2, 1}, El{4, 3, 1}, El{3, 4, 1})
+	m.AddFace(El{2, 1, 1}, El{1, 2, 1}, El{4, 3, 1}, El{3, 4, 1})
 	// sides
-	m.AddFaceQuad(El{1, 3, 2}, El{5, 4, 2}, El{6, 1, 2}, El{4, 2, 2})
-	m.AddFaceQuad(El{3, 3, 3}, El{6, 4, 3}, El{5, 1, 3}, El{2, 2, 3})
+	m.AddFace(El{1, 3, 2}, El{5, 4, 2}, El{6, 1, 2}, El{4, 2, 2})
+	m.AddFace(El{3, 3, 3}, El{6, 4, 3}, El{5, 1, 3}, El{2, 2, 3})
 	// ends
 	m.AddFace(El{2, 3, 4}, El{5, 5, 4}, El{1, 2, 4})
 	m.AddFace(El{4, 3, 5}, El{6, 5, 5}, El{3, 2, 5})
@@ -216,14 +216,14 @@ func Cylinder(segments int) *Mesh {
 		m.AddTexCoord(tx, 1)
 		m.AddTexCoord(tx, 0)
 		if i > 0 {
-			m.AddFaceQuad(El{2*i - 1, 2*i - 1, i}, El{2 * i, 2 * i, i},
+			m.AddFace(El{2*i - 1, 2*i - 1, i}, El{2 * i, 2 * i, i},
 				El{2*i + 2, 2*i + 2, i + 1}, El{2*i + 1, 2*i + 1, i + 1})
 		}
 	}
 	// close the cylinder
 	m.AddTexCoord(0, 1)
 	m.AddTexCoord(0, 0)
-	m.AddFaceQuad(El{-2, -3, -1}, El{-1, -4, -1}, El{2, -2, 1}, El{1, -1, 1})
+	m.AddFace(El{-2, -3, -1}, El{-1, -4, -1}, El{2, -2, 1}, El{1, -1, 1})
 	m.Build(nil)
 	cache[key{mCylinder, segments}] = m
 	return m

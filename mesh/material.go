@@ -6,11 +6,7 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/jnb666/go3d/assets"
 	"github.com/jnb666/go3d/glu"
-	"gopkg.in/qml.v1/gl/es2"
-	"image"
-	"image/jpeg"
-	"image/png"
-	"path"
+	"io"
 	"strconv"
 	"strings"
 )
@@ -415,56 +411,46 @@ func getProgram(id int) (*glu.Program, bool) {
 
 // get texture which has been packed using go-bindata
 func getTexture(id int) glu.Texture {
-	if tex, ok := texCache[id]; ok {
+	tex, ok := texCache[id]
+	if ok {
 		return tex
 	}
+	var err error
 	switch id {
 	case tWood:
 		fmt.Println("load texture2D wood")
-		tex := glu.NewTexture2D(GL.MIRRORED_REPEAT)
-		img := getImage("wood_rgb.png")
-		texCache[id] = tex.SetImage(img, false)
+		tex, err = glu.NewTexture2D(false, false).SetImage(getImage("wood_rgb.png"), glu.PngFormat)
 	case tTurbulence:
 		fmt.Println("load texture3D turbulence3")
-		tex := glu.NewTexture3D()
-		img := getImage("turbulence3.png")
-		texCache[id] = tex.SetImage(img, false, []int{64, 64, 64})
+		tex, err = glu.NewTexture3D().SetImage(getImage("turbulence3.png"), glu.PngFormat, []int{64, 64, 64})
 	default:
-		panic("unknown texture")
+		err = fmt.Errorf("unknown texture")
 	}
-	return texCache[id]
+	if err != nil {
+		panic(err)
+	}
+	texCache[id] = tex
+	return tex
 }
 
 func getTextureCube(id int, baseFile string) glu.Texture {
 	if tex, ok := texCache[id]; ok {
 		return tex
 	}
-	tex := glu.NewTextureCube()
 	fmt.Printf("load textureCube %s\n", baseFile)
+	tex := glu.NewTextureCube(false)
 	for i, side := range []string{"posx", "negx", "posy", "negy", "posz", "negz"} {
 		img := getImage(baseFile + "_" + side + "_rgb.png")
-		tex.SetImage(img, false, i)
+		tex.SetImage(img, glu.PngFormat, i)
 	}
 	texCache[id] = tex
 	return tex
 }
 
-func getImage(file string) (img image.Image) {
+func getImage(file string) io.Reader {
 	data, err := assets.Asset(file)
 	if err != nil {
 		panic(fmt.Errorf("error loading asset %s: %s", file, err))
 	}
-	ext := path.Ext(file)
-	switch ext {
-	case ".png":
-		img, err = png.Decode(bytes.NewReader(data))
-	case ".jpeg", ".jpg":
-		img, err = jpeg.Decode(bytes.NewReader(data))
-	default:
-		panic("unknown file extension " + ext)
-	}
-	if err != nil {
-		panic(fmt.Errorf("error decoding image: %s", err))
-	}
-	return img
+	return bytes.NewReader(data)
 }

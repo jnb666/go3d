@@ -42,14 +42,13 @@ func (t *Shapes) initialise() {
 	t.view = scene.NewView(camera).AddLight(light)
 
 	fmt.Println("load gopher texture")
-	img, err := glu.PNGImage("gopher_rgb.png")
+	tex2d, err := glu.NewTexture2D(false, false).SetImageFile("gopher_rgb.png")
 	if err != nil {
 		panic(err)
 	}
-	tex2d := glu.NewTexture2D(GL.REPEAT).SetImage(img, false)
-	texCube := glu.NewTextureCube()
+	texCube := glu.NewTextureCube(false)
 	for i := 0; i < 6; i++ {
-		texCube.SetImage(img, false, i)
+		texCube.SetImageFile("gopher_rgb.png", i)
 	}
 	t.background = scene.NewItem(mesh.Cube().Invert()).SetMaterial(mesh.Skybox())
 	t.background.Enable(false).Scale(10, 10, 10)

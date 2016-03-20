@@ -51,7 +51,7 @@ func (a *VertexArray) Enable() {
 	gl.BindBuffer(a.btype, a.buffer)
 }
 
-// Draw specified elements from the array
+// Draw all of the elements in the array buffer or element array
 func (a *VertexArray) Draw(mode glbase.Enum, winding glbase.Enum) {
 	gl.FrontFace(winding)
 	if a.btype == GL.ELEMENT_ARRAY_BUFFER {

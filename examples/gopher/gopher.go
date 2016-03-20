@@ -113,11 +113,11 @@ func (t *GopherCube) initGL(gl *GL.GL) {
 	t.floor = glu.ElementArrayBuffer(elements[36:])
 
 	// load texture
-	img, err := glu.PNGImage("gopher.png")
-	if err != nil {
+	var err error
+	fmt.Println("load gopher texture")
+	if t.texture, err = glu.NewTexture2D(false, false).SetImageFile("gopher.png"); err != nil {
 		panic(err)
 	}
-	t.texture = glu.NewTexture2D(GL.CLAMP_TO_EDGE).SetImage(img, false)
 
 	// compile program
 	if t.program, err = glu.NewProgram(vertexShader, fragmentShader, attribs, vertexSize); err != nil {

@@ -71,11 +71,10 @@ func (t *GopherCube) initGL(gl *GL.GL) scene.Object {
 
 	// load texture
 	fmt.Println("load gopher texture")
-	img, err := glu.PNGImage("gopher.png")
+	tex, err := glu.NewTexture2D(false, true).SetImageFile("gopher.png")
 	if err != nil {
 		panic(err)
 	}
-	tex := glu.NewTexture2D(GL.CLAMP_TO_EDGE).SetImage(img, true)
 
 	// materials
 	gopher := mesh.DiffuseTex(tex)
