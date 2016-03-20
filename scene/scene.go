@@ -28,6 +28,7 @@ type Object interface {
 	Clone() Object
 	Enabled() bool
 	Enable(on bool) Object
+	SetMaterial(mtl mesh.Material) Object
 }
 
 // Group type represents a set of objects, it implements the Object interface
@@ -78,6 +79,14 @@ func (g *Group) Do(trans Transform, fn func(*Item, Transform)) {
 	}
 }
 
+// Update the current material associated with all the items in this group.
+func (g *Group) SetMaterial(mtl mesh.Material) Object {
+	for _, obj := range g.objects {
+		obj.SetMaterial(mtl)
+	}
+	return g
+}
+
 // Scale method scales the size of the object
 func (g *Group) Scale(scaleX, scaleY, scaleZ float32) Object {
 	g.Transform.Mat4 = g.Mul4(mgl32.Scale3D(scaleX, scaleY, scaleZ))
@@ -124,55 +133,43 @@ func (g *Group) Enable(on bool) Object {
 // Item type represents a single component which is added to the scene
 type Item struct {
 	Transform
-	Mesh     *mesh.Mesh
+	*mesh.Mesh
 	Light    *Light
 	TexScale float32
-	material mesh.Material
-	lightMat mesh.Material
+	lightMat map[bool]mesh.Material
 	enabled  bool
 }
 
 // NewItem function constructs a new object with given material and identity transformation matrix.
 // If mtl parameter is nil then use default emissive or point material depending on mesh type.
-func NewItem(msh *mesh.Mesh, mtl mesh.Material) *Item {
+func NewItem(msh *mesh.Mesh) *Item {
 	obj := new(Item)
 	obj.Mesh = msh
 	obj.Transform = NewTransform(mgl32.Ident4())
 	obj.TexScale = 1
-	if mtl == nil {
-		if msh.PointSize() != 0 {
-			obj.material = mesh.PointMaterial()
-		} else {
-			obj.material = mesh.Diffuse()
-		}
-	} else {
-		obj.material = mtl
-	}
 	obj.enabled = true
 	return obj
 }
 
 // Get the current material associated with this item.
 func (o *Item) Material() mesh.Material {
-	if o.Light != nil && o.Light.On {
-		o.lightMat.SetColor(o.Light.Col.Vec3().Vec4(1))
-		return o.lightMat
-	} else {
-		return o.material
-	}
+	return o.Mesh.Material()
 }
 
-// Update the current material associated with this item.
-func (o *Item) SetMaterial(mtl mesh.Material) *Item {
-	o.material = mtl
+// Set the current material associated with this item.
+func (o *Item) SetMaterial(mtl mesh.Material) Object {
+	o.Mesh.SetMaterial(mtl)
 	return o
 }
 
 // Associate a point light with this item, position will be calculated dynamically
 func (o *Item) Illuminate(intensity, ambient, attenuation float32) *Item {
-	color := o.material.Color().Vec3().Mul(intensity)
+	color := o.Mesh.Material().Color().Vec3().Mul(intensity)
 	o.Light = PointLight(color, ambient, mgl32.Vec3{}, attenuation)
-	o.lightMat = mesh.Emissive()
+	o.lightMat = map[bool]mesh.Material{
+		false: o.Mesh.Material(),
+		true:  mesh.Emissive(),
+	}
 	return o
 }
 
@@ -181,12 +178,24 @@ func (o *Item) Do(trans Transform, fn func(*Item, Transform)) {
 	if !o.enabled {
 		return
 	}
+	if o.Light != nil {
+		o.Mesh.SetMaterial(o.lightMat[o.Light.On])
+	}
 	fn(o, Transform{Mat4: trans.Mul4(o.Transform.Mat4), Scale: vmul(trans.Scale, o.Transform.Scale)})
 }
 
 // Get a copy of the item. Note that the mesh is not copied, it is a reference to the same object
 func (o *Item) Clone() Object {
 	item := *o
+	item.Mesh = o.Mesh.Clone()
+	if o.Light != nil {
+		lgt := *o.Light
+		item.Light = &lgt
+		item.lightMat = map[bool]mesh.Material{
+			false: o.Mesh.Material().Clone(),
+			true:  mesh.Emissive().Clone(),
+		}
+	}
 	return &item
 }
 

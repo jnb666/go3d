@@ -38,25 +38,25 @@ func (t *Scene) initialise(gl *GL.GL) scene.Object {
 	world := scene.NewGroup()
 
 	// room with marble floor
-	blue := mesh.NewDiffuse().SetColor(mgl32.Vec4{0.3, 0.3, 1, 1})
+	blue := mesh.Diffuse().SetColor(mgl32.Vec4{0.3, 0.3, 1, 1})
 	marble := mesh.Marble().SetColor(mgl32.Vec4{0.2, 0.3, 0.3, 1})
 	room := scene.NewGroup()
-	walls := scene.NewItem(mesh.Cube().Invert(), blue).Translate(0, 0.5, 0)
-	floor := scene.NewItem(mesh.Plane(), marble).Translate(0, 0.01, 0)
+	walls := scene.NewItem(mesh.Cube().Invert().SetMaterial(blue)).Translate(0, 0.5, 0)
+	floor := scene.NewItem(mesh.Plane().SetMaterial(marble)).Translate(0, 0.01, 0)
 	room.Add(walls, floor)
 	room.Scale(10, 4, 10)
 	world.Add(room)
 
 	// ceiling light
-	t.lamp[0] = scene.NewItem(mesh.Cylinder(30), mesh.Rough()).Illuminate(2, 0.2, 0.5)
+	t.lamp[0] = scene.NewItem(mesh.Cylinder(30).SetMaterial(mesh.Rough())).Illuminate(2, 0.2, 0.5)
 	t.lamp[0].Scale(0.5, 0.2, 0.5).Translate(0, 3.8, 0)
 	world.Add(t.lamp[0])
 
 	// wooden table
 	wood := mesh.Wood().SetColor(mgl32.Vec4{0.90, 0.43, 0.14, 1})
 	metal := mesh.Rough().SetColor(glu.Grey)
-	top := scene.NewItem(mesh.Cube(), wood).Scale(2, 0.05, 1).Translate(0, 1, 0)
-	leg := scene.NewItem(mesh.Cylinder(36), metal).Scale(0.1, 1, 0.1).Translate(0, 0.5, 0)
+	top := scene.NewItem(mesh.Cube().SetMaterial(wood)).Scale(2, 0.05, 1).Translate(0, 1, 0)
+	leg := scene.NewItem(mesh.Cylinder(36).SetMaterial(metal)).Scale(0.1, 1, 0.1).Translate(0, 0.5, 0)
 	table := scene.NewGroup()
 	table.Add(top)
 	table.Add(leg.Clone().Translate(-0.9, 0, -0.4))
@@ -68,17 +68,17 @@ func (t *Scene) initialise(gl *GL.GL) scene.Object {
 
 	// desk lamp
 	redPlastic := mesh.Plastic().SetColor(glu.Red)
-	t.lamp[1] = scene.NewItem(mesh.Sphere(2), mesh.Rough()).Illuminate(1, 0.1, 5)
+	t.lamp[1] = scene.NewItem(mesh.Sphere(2).SetMaterial(mesh.Rough())).Illuminate(1, 0.1, 5)
 	t.lamp[1].Light.Col[2] = 0.4
 	lamp := scene.NewGroup()
-	lamp.Add(scene.NewItem(mesh.Cone(30), redPlastic).Scale(2, 2, 2).Translate(0, -1, 0))
+	lamp.Add(scene.NewItem(mesh.Cone(30).SetMaterial(redPlastic)).Scale(2, 2, 2).Translate(0, -1, 0))
 	lamp.Add(t.lamp[1])
 	lamp.Scale(0.1, 0.1, 0.1).Translate(-0.5, 1.2, 0)
 	table.Add(lamp)
 
 	// glass sphere
 	glass := mesh.Glass()
-	sphere := scene.NewItem(mesh.Sphere(3), glass).Scale(0.3, 0.3, 0.3).Translate(0, 1.175, 0)
+	sphere := scene.NewItem(mesh.Sphere(3).SetMaterial(glass)).Scale(0.3, 0.3, 0.3).Translate(0, 1.175, 0)
 	table.Add(sphere)
 
 	return world

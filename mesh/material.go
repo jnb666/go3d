@@ -12,6 +12,7 @@ import (
 	"image/png"
 	"path"
 	"strconv"
+	"strings"
 )
 
 // Interface type for a material which can be used to render a mesh
@@ -20,6 +21,9 @@ type Material interface {
 	Disable()
 	Color() mgl32.Vec4
 	SetColor(c mgl32.Vec4) Material
+	Ambient() float32
+	SetAmbient(s float32) Material
+	Clone() Material
 }
 
 const (
@@ -51,7 +55,46 @@ const (
 var (
 	progCache = map[int]*glu.Program{}
 	texCache  = map[int]glu.Texture{}
+	mtlCache  = map[string]Material{}
 )
+
+// Get material by name
+func LoadMaterial(name string) (Material, error) {
+	mtl, ok := mtlCache[strings.ToLower(name)]
+	if ok {
+		return mtl, nil
+	}
+	switch name {
+	case "diffuse":
+		mtl = Diffuse()
+	case "earth":
+		mtl = Earth()
+	case "emissive":
+		mtl = Emissive()
+	case "glass":
+		mtl = Glass()
+	case "marble":
+		mtl = Marble()
+	case "plastic":
+		mtl = Plastic()
+	case "rough":
+		mtl = Rough()
+	case "skybox":
+		mtl = Skybox()
+	case "unshaded":
+		mtl = Unshaded()
+	case "wood":
+		mtl = Wood()
+	default:
+		return nil, fmt.Errorf("LoadMaterial: no material called %s", name)
+	}
+	return mtl, nil
+}
+
+// Save material to cache
+func SaveMaterial(name string, mtl Material) {
+	mtlCache[strings.ToLower(name)] = mtl
+}
 
 // Unshaded colored material with optional texture
 type unshaded struct {
@@ -82,13 +125,18 @@ func UnshadedTex(tex glu.Texture) Material {
 	return &unshaded{baseMaterial: m}
 }
 
+func (m *unshaded) Clone() Material {
+	return &unshaded{m.baseMaterial.clone()}
+}
+
 func (m *unshaded) SetColor(c mgl32.Vec4) Material {
 	m.baseMaterial.color = c
 	return m
 }
 
-type pointMaterial struct {
-	*baseMaterial
+func (m *unshaded) SetAmbient(scale float32) Material {
+	m.baseMaterial.ambient = scale
+	return m
 }
 
 // Material used for drawing points
@@ -101,11 +149,6 @@ func PointMaterial() Material {
 		m.prog.Uniform("1f", "pointSize")
 	}
 	return &unshaded{baseMaterial: m}
-}
-
-func (m *pointMaterial) SetColor(col mgl32.Vec4) Material {
-	m.color = col
-	return m
 }
 
 // Emissive material which looks like it glows
@@ -150,8 +193,17 @@ func DiffuseTex(tex glu.Texture) Material {
 	return &diffuse{baseMaterial: m}
 }
 
+func (m *diffuse) Clone() Material {
+	return &diffuse{m.baseMaterial.clone()}
+}
+
 func (m *diffuse) SetColor(c mgl32.Vec4) Material {
 	m.baseMaterial.color = c
+	return m
+}
+
+func (m *diffuse) SetAmbient(scale float32) Material {
+	m.baseMaterial.ambient = scale
 	return m
 }
 
@@ -164,9 +216,8 @@ func Earth() Material {
 // Reflective material with optional texture
 type reflective struct {
 	*baseMaterial
-	specular     mgl32.Vec3
-	shininess    float32
-	ambientScale float32
+	specular  mgl32.Vec3
+	shininess float32
 }
 
 func Reflective(specular mgl32.Vec4, shininess float32) Material {
@@ -179,7 +230,6 @@ func Reflective(specular mgl32.Vec4, shininess float32) Material {
 		baseMaterial: m,
 		specular:     specular.Vec3(),
 		shininess:    shininess,
-		ambientScale: 1,
 	}
 }
 
@@ -203,13 +253,20 @@ func ReflectiveTex(specular mgl32.Vec4, shininess float32, tex glu.Texture) Mate
 		baseMaterial: m,
 		specular:     specular.Vec3(),
 		shininess:    shininess,
-		ambientScale: 1,
 	}
 }
 
 func initReflective(prog *glu.Program) {
 	prog.Uniform("v3f", "specularColor")
-	prog.Uniform("1f", "shininess", "ambientScale")
+	prog.Uniform("1f", "shininess")
+}
+
+func (m *reflective) Clone() Material {
+	return &reflective{
+		baseMaterial: m.baseMaterial.clone(),
+		specular:     m.specular,
+		shininess:    m.shininess,
+	}
 }
 
 func (m *reflective) SetColor(c mgl32.Vec4) Material {
@@ -217,9 +274,13 @@ func (m *reflective) SetColor(c mgl32.Vec4) Material {
 	return m
 }
 
+func (m *reflective) SetAmbient(scale float32) Material {
+	m.baseMaterial.ambient = scale
+	return m
+}
+
 func (m *reflective) Enable() *glu.Program {
 	prog := m.baseMaterial.Enable()
-	prog.Set("ambientScale", m.ambientScale)
 	prog.Set("specularColor", m.specular)
 	prog.Set("shininess", m.shininess)
 	return prog
@@ -250,13 +311,13 @@ func Wood() Material {
 		baseMaterial: m,
 		specular:     mgl32.Vec3{0.5, 0.5, 0.5},
 		shininess:    10,
-		ambientScale: 1,
 	}
 }
 
 // Rough randomly textured material
 func Rough() Material {
 	m := newMaterial(glu.White)
+	m.ambient = 0.7
 	var cached bool
 	if m.prog, cached = getProgram(mRoughShader); !cached {
 		initReflective(m.prog)
@@ -267,7 +328,6 @@ func Rough() Material {
 		baseMaterial: m,
 		specular:     mgl32.Vec3{0.5, 0.5, 0.5},
 		shininess:    32,
-		ambientScale: 0.7,
 	}
 }
 
@@ -284,24 +344,25 @@ func Marble() Material {
 		baseMaterial: m,
 		specular:     mgl32.Vec3{0.8, 0.8, 0.8},
 		shininess:    200,
-		ambientScale: 1,
 	}
 }
 
 // base type for all materials
 type baseMaterial struct {
-	prog  *glu.Program
-	tex   []glu.Texture
-	color mgl32.Vec4
+	prog    *glu.Program
+	tex     []glu.Texture
+	color   mgl32.Vec4
+	ambient float32
 }
 
 func newMaterial(color mgl32.Vec4) *baseMaterial {
-	return &baseMaterial{tex: []glu.Texture{}, color: color}
+	return &baseMaterial{tex: []glu.Texture{}, color: color, ambient: 1}
 }
 
 func (m *baseMaterial) Enable() *glu.Program {
 	m.prog.Use()
 	m.prog.Set("objectColor", m.color)
+	m.prog.Set("ambientScale", m.ambient)
 	for i, tex := range m.tex {
 		tex.Activate()
 		m.prog.Set("tex"+strconv.Itoa(i), tex.Id())
@@ -309,7 +370,18 @@ func (m *baseMaterial) Enable() *glu.Program {
 	return m.prog
 }
 
+func (m *baseMaterial) clone() *baseMaterial {
+	return &baseMaterial{
+		prog:    m.prog,
+		tex:     append([]glu.Texture{}, m.tex...),
+		color:   m.color,
+		ambient: m.ambient,
+	}
+}
+
 func (m *baseMaterial) Color() mgl32.Vec4 { return m.color }
+
+func (m *baseMaterial) Ambient() float32 { return m.ambient }
 
 func (m *baseMaterial) Disable() {}
 
@@ -332,7 +404,7 @@ func getProgram(id int) (*glu.Program, bool) {
 	prog.Uniform("v4f", "objectColor")
 	if id != mPointShader {
 		prog.Uniform("m3f", "normalModelToCamera")
-		prog.Uniform("1f", "texScale")
+		prog.Uniform("1f", "texScale", "ambientScale")
 		prog.Uniform("v3f", "modelScale")
 		prog.Uniform("1i", "numLights")
 		prog.UniformArray(MaxLights, "v4f", "lightPos", "lightCol")

@@ -30,7 +30,7 @@ const (
 func Point(pointSize int) *Mesh {
 	m, ok := cache[key{mPoint, pointSize}]
 	if ok {
-		return m
+		return m.Clone()
 	}
 	if pointSize <= 0 {
 		panic("point size must be > 0!")
@@ -48,7 +48,7 @@ func Point(pointSize int) *Mesh {
 	m.AddTexCoord(1, 0)
 	m.AddNormal(0, 0, 1)
 	m.AddFaceQuad(El{4, 1, 1}, El{3, 2, 1}, El{2, 3, 1}, El{1, 4, 1})
-	m.Build()
+	m.Build(nil)
 	cache[key{mPoint, 0}] = m
 	return m
 }
@@ -57,7 +57,7 @@ func Point(pointSize int) *Mesh {
 func Plane() *Mesh {
 	m, ok := cache[key{mPlane, 0}]
 	if ok {
-		return m
+		return m.Clone()
 	}
 	m = New()
 	m.AddVertex(-0.5, 0, -0.5)
@@ -70,7 +70,7 @@ func Plane() *Mesh {
 	m.AddTexCoord(1, 0)
 	m.AddNormal(0, 1, 0)
 	m.AddFaceQuad(El{1, 1, 1}, El{2, 2, 1}, El{3, 3, 1}, El{4, 4, 1})
-	m.Build()
+	m.Build(nil)
 	cache[key{mPlane, 0}] = m
 	return m
 }
@@ -79,7 +79,7 @@ func Plane() *Mesh {
 func Cube() *Mesh {
 	m, ok := cache[key{mCube, 0}]
 	if ok {
-		return m
+		return m.Clone()
 	}
 	m = New()
 	m.AddVertex(-0.5, 0.5, -0.5)
@@ -106,7 +106,7 @@ func Cube() *Mesh {
 	m.AddFaceQuad(El{4, 1, 4}, El{8, 2, 4}, El{5, 3, 4}, El{1, 4, 4})
 	m.AddFaceQuad(El{2, 1, 5}, El{6, 2, 5}, El{7, 3, 5}, El{3, 4, 5})
 	m.AddFaceQuad(El{6, 1, 6}, El{5, 2, 6}, El{8, 3, 6}, El{7, 4, 6})
-	m.Build()
+	m.Build(nil)
 	cache[key{mCube, 0}] = m
 	return m
 }
@@ -116,7 +116,7 @@ func Cube() *Mesh {
 func Prism() *Mesh {
 	m, ok := cache[key{mPrism, 0}]
 	if ok {
-		return m
+		return m.Clone()
 	}
 	m = New()
 	h := float32(math.Sqrt(3) / 2)
@@ -144,7 +144,7 @@ func Prism() *Mesh {
 	// ends
 	m.AddFace(El{2, 3, 4}, El{5, 5, 4}, El{1, 2, 4})
 	m.AddFace(El{4, 3, 5}, El{6, 5, 5}, El{3, 2, 5})
-	m.Build()
+	m.Build(nil)
 	cache[key{mPrism, 0}] = m
 	return m
 }
@@ -153,7 +153,7 @@ func Prism() *Mesh {
 func Circle(segments int) *Mesh {
 	m, ok := cache[key{mCircle, segments}]
 	if ok {
-		return m
+		return m.Clone()
 	}
 	m = New()
 	pts := getCircle(segments)
@@ -182,7 +182,7 @@ func doCircle(m *Mesh, pts []mgl32.Vec2, y, yNormal float32) {
 			m.AddFace(centre, El{ix + 2, ix + 2, 1}, El{prev, prev, 1})
 		}
 	}
-	m.Build()
+	m.Build(nil)
 	m.Clear()
 }
 
@@ -200,7 +200,7 @@ func getCircle(segments int) []mgl32.Vec2 {
 func Cylinder(segments int) *Mesh {
 	m, ok := cache[key{mCylinder, segments}]
 	if ok {
-		return m
+		return m.Clone()
 	}
 	m = New()
 	// ends
@@ -224,7 +224,7 @@ func Cylinder(segments int) *Mesh {
 	m.AddTexCoord(0, 1)
 	m.AddTexCoord(0, 0)
 	m.AddFaceQuad(El{-2, -3, -1}, El{-1, -4, -1}, El{2, -2, 1}, El{1, -1, 1})
-	m.Build()
+	m.Build(nil)
 	cache[key{mCylinder, segments}] = m
 	return m
 }
@@ -234,7 +234,7 @@ func Cylinder(segments int) *Mesh {
 func Cone(segments int) *Mesh {
 	m, ok := cache[key{mCone, segments}]
 	if ok {
-		return m
+		return m.Clone()
 	}
 	m = New()
 	// base
@@ -273,7 +273,7 @@ func Cone(segments int) *Mesh {
 	} else {
 		m.AddFace(El{-1, -2, -1}, El{1, -1, -1}, El{2, 2, 1})
 	}
-	m.Build()
+	m.Build(nil)
 	cache[key{mCone, segments}] = m
 	return m
 }
@@ -282,12 +282,12 @@ func Cone(segments int) *Mesh {
 func Icosohedron() *Mesh {
 	m, ok := cache[key{mIcosohedron, 0}]
 	if ok {
-		return m
+		return m.Clone()
 	}
 	m = New()
 	faces := doIcosohedron(m)
 	m.addElementTriangles(faces)
-	m.Build()
+	m.Build(nil)
 	cache[key{mIcosohedron, 0}] = m
 	return m
 }
@@ -327,7 +327,7 @@ func doIcosohedron(m *Mesh) [][3]int {
 func Sphere(recursionLevel int) *Mesh {
 	m, ok := cache[key{mSphere, recursionLevel}]
 	if ok {
-		return m
+		return m.Clone()
 	}
 	m = New()
 	faces := doIcosohedron(m)
@@ -346,7 +346,7 @@ func Sphere(recursionLevel int) *Mesh {
 		faces = faces2
 	}
 	m.addElementTriangles(faces)
-	m.Build()
+	m.Build(nil)
 	cache[key{mSphere, recursionLevel}] = m
 	return m
 }

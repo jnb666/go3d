@@ -35,32 +35,29 @@ func NewView(camera Camera) *View {
 // Draw the scene with the given view matrix
 func (v *View) Draw(worldToCamera mgl32.Mat4, scene Object) {
 	scene.Do(NewTransform(worldToCamera), func(o *Item, t Transform) {
-		o.Mesh.Enable()
-		mtl := o.Material()
-		prog := mtl.Enable()
-		mat := t.Mat4
-		if psize := o.Mesh.PointSize(); psize != 0 {
-			// points are always facing the camera at a constant size
-			pos := mgl32.Vec3{mat[12], mat[13], mat[14]}
-			sc := 2 * float32(psize) * pos.Len() / v.height
-			mat = mgl32.Mat4{sc, 0, 0, 0, 0, sc, 0, 0, 0, 0, sc, 0, pos[0], pos[1], pos[2], 1}
-			prog.Set("pointLocation", pos)
-			prog.Set("pointSize", float32(psize))
-			prog.Set("viewport", v.width, v.height)
-		} else {
-			prog.Set("texScale", o.TexScale)
-			prog.Set("normalModelToCamera", mat.Mat3().Inv().Transpose())
-			prog.Set("modelScale", t.Scale)
-			prog.Set("numLights", len(v.ldata))
-			for i, light := range v.ldata {
-				prog.SetArray("lightPos", i, light.Pos)
-				prog.SetArray("lightCol", i, light.Col)
+		o.Mesh.Draw(func(prog *glu.Program) {
+			mat := t.Mat4
+			if psize := o.Mesh.PointSize(); psize != 0 {
+				// points are always facing the camera at a constant size
+				pos := mgl32.Vec3{mat[12], mat[13], mat[14]}
+				sc := 2 * float32(psize) * pos.Len() / v.height
+				mat = mgl32.Mat4{sc, 0, 0, 0, 0, sc, 0, 0, 0, 0, sc, 0, pos[0], pos[1], pos[2], 1}
+				prog.Set("pointLocation", pos)
+				prog.Set("pointSize", float32(psize))
+				prog.Set("viewport", v.width, v.height)
+			} else {
+				prog.Set("texScale", o.TexScale)
+				prog.Set("normalModelToCamera", mat.Mat3().Inv().Transpose())
+				prog.Set("modelScale", t.Scale)
+				prog.Set("numLights", len(v.ldata))
+				for i, light := range v.ldata {
+					prog.SetArray("lightPos", i, light.Pos)
+					prog.SetArray("lightCol", i, light.Col)
+				}
 			}
-		}
-		prog.Set("cameraToClip", v.Proj)
-		prog.Set("modelToCamera", mat)
-		o.Mesh.Draw()
-		mtl.Disable()
+			prog.Set("cameraToClip", v.Proj)
+			prog.Set("modelToCamera", mat)
+		})
 	})
 }
 

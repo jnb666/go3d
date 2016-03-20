@@ -86,9 +86,9 @@ func (t *GopherCube) initGL(gl *GL.GL) scene.Object {
 
 	// world model
 	objs := scene.NewGroup()
-	objs.Add(scene.NewItem(mesh.Cube(), gopher))
-	objs.Add(scene.NewItem(mesh.Plane(), floor).Scale(2, 1, 2).Translate(0, -0.5, 0))
-	objs.Add(scene.NewItem(mesh.Cube().Invert(), reflect).Scale(1, -1, 1).Translate(0, -1, 0))
+	objs.Add(scene.NewItem(mesh.Cube()).SetMaterial(gopher))
+	objs.Add(scene.NewItem(mesh.Plane()).SetMaterial(floor).Scale(2, 1, 2).Translate(0, -0.5, 0))
+	objs.Add(scene.NewItem(mesh.Cube().Invert()).SetMaterial(reflect).Scale(1, -1, 1).Translate(0, -1, 0))
 	objs.Translate(0, 0.2, 0)
 	return objs
 }

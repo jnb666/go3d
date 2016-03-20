@@ -51,8 +51,8 @@ func (t *Shapes) initialise() {
 	for i := 0; i < 6; i++ {
 		texCube.SetImage(img, false, i)
 	}
-	t.background = scene.NewItem(mesh.Cube().Invert(), mesh.Skybox()).Enable(false)
-	t.background.Scale(10, 10, 10)
+	t.background = scene.NewItem(mesh.Cube().Invert()).SetMaterial(mesh.Skybox())
+	t.background.Enable(false).Scale(10, 10, 10)
 	spec := mgl32.Vec4{0.5, 0.5, 0.5, 1}
 	t.matName = "plastic"
 	t.material = map[string]mesh.Material{
@@ -69,19 +69,18 @@ func (t *Shapes) initialise() {
 		"texturecube": mesh.ReflectiveTex(spec, 32, texCube),
 		"point":       mesh.PointMaterial().SetColor(glu.Red),
 	}
-	mat := t.material[t.matName]
 	t.shapeName = "cube"
 	t.shapes = map[string]scene.Object{
-		"cube":        scene.NewItem(mesh.Cube(), mat),
-		"prism":       scene.NewItem(mesh.Prism(), mat).Scale(1.1, 1.1, 1.1),
-		"pyramid":     scene.NewItem(mesh.Cone(4), mat).Scale(1.4, 1.1, 1.4),
-		"point":       scene.NewItem(mesh.Point(10), t.material["point"]).Translate(0.5, 0, 0.5),
-		"plane":       scene.NewItem(mesh.Plane(), mat).Scale(2, 1, 2),
-		"circle":      scene.NewItem(mesh.Circle(60), mat).Scale(2, 1, 2),
-		"cylinder":    scene.NewGroup().Add(scene.NewItem(mesh.Cylinder(60), mat).RotateX(90)),
-		"cone":        scene.NewGroup().Add(scene.NewItem(mesh.Cone(120), mat).Scale(1.2, 1.2, 1.2).RotateX(90)),
-		"icosohedron": scene.NewItem(mesh.Icosohedron(), mat).Scale(1.5, 1.5, 1.5),
-		"sphere":      scene.NewItem(mesh.Sphere(3), mat).Scale(1.4, 1.4, 1.4),
+		"cube":        scene.NewItem(mesh.Cube()),
+		"prism":       scene.NewItem(mesh.Prism()).Scale(1.1, 1.1, 1.1),
+		"pyramid":     scene.NewItem(mesh.Cone(4)).Scale(1.4, 1.1, 1.4),
+		"point":       scene.NewItem(mesh.Point(10)).Translate(0.5, 0, 0.5),
+		"plane":       scene.NewItem(mesh.Plane()).Scale(2, 1, 2),
+		"circle":      scene.NewItem(mesh.Circle(60)).Scale(2, 1, 2),
+		"cylinder":    scene.NewGroup().Add(scene.NewItem(mesh.Cylinder(60)).RotateX(90)),
+		"cone":        scene.NewGroup().Add(scene.NewItem(mesh.Cone(120)).Scale(1.2, 1.2, 1.2).RotateX(90)),
+		"icosohedron": scene.NewItem(mesh.Icosohedron()).Scale(1.5, 1.5, 1.5),
+		"sphere":      scene.NewItem(mesh.Sphere(3)).Scale(1.4, 1.4, 1.4),
 	}
 }
 
@@ -106,7 +105,7 @@ func (t *Shapes) GetColor() color.RGBA {
 	if t.shapeName == "point" {
 		c = t.material["point"].Color()
 	} else {
-		c = t.material[t.shapeName].Color()
+		c = t.material[t.matName].Color()
 	}
 	return color.RGBA{uint8(255 * c[0]), uint8(255 * c[1]), uint8(255 * c[2]), uint8(255 * c[3])}
 }

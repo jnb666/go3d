@@ -11,62 +11,50 @@ const chunkSize = 4096
 
 // an array of buffer data
 type VertexArray struct {
-	buffer []glbase.Buffer
-	btype  []glbase.Enum
+	buffer glbase.Buffer
+	btype  glbase.Enum
 	size   int
 }
 
-// NewArray creates a new Vertex array with associated data.
-func NewArray(vertices []float32, elements []uint32, vertexSize int) *VertexArray {
-	a := new(VertexArray)
-	if vertices == nil || len(vertices) == 0 {
-		panic("NewArray: vertex data is required!")
-	}
-	a.add(GL.ARRAY_BUFFER, len(vertices), vertices)
-	a.size = len(vertices) / vertexSize
-	if elements != nil && len(elements) > 0 {
-		a.add(GL.ELEMENT_ARRAY_BUFFER, len(elements), elements)
-		a.size = len(elements)
+// ArrayBuffer creates a new empty Vertex array with associated data. Size is the numer of size of each vertex in words.
+func ArrayBuffer(data []float32, vertexSize int) *VertexArray {
+	buf := gl.GenBuffers(1)
+	a := &VertexArray{buffer: buf[0], btype: GL.ARRAY_BUFFER, size: len(data) / vertexSize}
+	gl.BindBuffer(a.btype, buf[0])
+	gl.BufferData(a.btype, len(data)*4, nil, GL.STATIC_DRAW)
+	for start := 0; start < len(data); start += chunkSize {
+		end := min(start+chunkSize, len(data))
+		gl.BufferSubData(a.btype, start*4, (end-start)*4, data[start:end])
 	}
 	CheckError()
 	runtime.SetFinalizer(a, deleteArray)
 	return a
 }
 
-// add a data buffer to the array
-func (a *VertexArray) add(typ glbase.Enum, size int, data interface{}) {
+// ElementArrayBuffer creates a new empty Vertex array with associated data.
+func ElementArrayBuffer(data []uint32) *VertexArray {
 	buf := gl.GenBuffers(1)
-	a.buffer = append(a.buffer, buf[0])
-	a.btype = append(a.btype, typ)
-	gl.BindBuffer(typ, buf[0])
-	gl.BufferData(typ, size*4, nil, GL.STATIC_DRAW)
-	for start := 0; start < size; start += chunkSize {
-		end := start + chunkSize
-		if end > size {
-			end = size
-		}
-		switch dat := data.(type) {
-		case []float32:
-			gl.BufferSubData(typ, start*4, (end-start)*4, dat[start:end])
-		case []uint32:
-			gl.BufferSubData(typ, start*4, (end-start)*4, dat[start:end])
-		default:
-			panic("invalid type: expecting []float32 or []uint32")
-		}
+	a := &VertexArray{buffer: buf[0], btype: GL.ELEMENT_ARRAY_BUFFER, size: len(data)}
+	gl.BindBuffer(a.btype, buf[0])
+	gl.BufferData(a.btype, len(data)*4, nil, GL.STATIC_DRAW)
+	for start := 0; start < len(data); start += chunkSize {
+		end := min(start+chunkSize, len(data))
+		gl.BufferSubData(a.btype, start*4, (end-start)*4, data[start:end])
 	}
+	CheckError()
+	runtime.SetFinalizer(a, deleteArray)
+	return a
 }
 
-// Make buffers current
+// Make buffer current
 func (a *VertexArray) Enable() {
-	for i, buf := range a.buffer {
-		gl.BindBuffer(a.btype[i], buf)
-	}
+	gl.BindBuffer(a.btype, a.buffer)
 }
 
 // Draw specified elements from the array
 func (a *VertexArray) Draw(mode glbase.Enum, winding glbase.Enum) {
 	gl.FrontFace(winding)
-	if len(a.buffer) > 1 {
+	if a.btype == GL.ELEMENT_ARRAY_BUFFER {
 		gl.DrawElements(mode, a.size, GL.UNSIGNED_INT, nil)
 	} else {
 		gl.DrawArrays(mode, 0, a.size)
@@ -78,6 +66,13 @@ func (a *VertexArray) Draw(mode glbase.Enum, winding glbase.Enum) {
 
 func deleteArray(a *VertexArray) {
 	fmt.Println("finalizer called for VertexArray")
-	gl.DeleteBuffers(a.buffer)
-	a.buffer = nil
+	gl.DeleteBuffers([]glbase.Buffer{a.buffer})
+	a.buffer = 0
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

@@ -32,14 +32,20 @@ type El struct {
 type Mesh struct {
 	inverted  int
 	vdata     []float32
-	edata     []uint32
-	array     [2]*glu.VertexArray
+	groups    []meshGroup
+	varray    [2]*glu.VertexArray
 	vertices  []mgl32.Vec3
 	normals   []mgl32.Vec3
 	texcoords []mgl32.Vec2
 	elements  []El
 	ncache    normalCache
 	pointSize int
+}
+
+type meshGroup struct {
+	mtl    Material
+	edata  []uint32
+	earray *glu.VertexArray
 }
 
 type normalCache struct {
@@ -49,7 +55,7 @@ type normalCache struct {
 
 // NewMesh creates a new empty mesh structure
 func New() *Mesh {
-	return &Mesh{ncache: newNormalCache()}
+	return &Mesh{ncache: newNormalCache(), groups: []meshGroup{}}
 }
 
 func newNormalCache() normalCache {
@@ -64,6 +70,19 @@ func (m *Mesh) Clear() *Mesh {
 	m.elements = nil
 	m.ncache = newNormalCache()
 	return m
+}
+
+// Clone method makes a copy of the mesh with the same vertex data, but a copy of the materials
+func (m *Mesh) Clone() *Mesh {
+	newMesh := New()
+	newMesh.vdata = m.vdata
+	newMesh.inverted = m.inverted
+	newMesh.varray = m.varray
+	newMesh.pointSize = m.pointSize
+	for _, grp := range m.groups {
+		newMesh.groups = append(newMesh.groups, meshGroup{mtl: grp.mtl.Clone(), edata: grp.edata, earray: grp.earray})
+	}
+	return newMesh
 }
 
 // Point method returns point size, or zero for non-point
@@ -144,7 +163,15 @@ func (n normalCache) build(m *Mesh) {
 
 // Build method processes the data which has been added so far and appends it to the vertex and element buffers.
 // It can be called multiple times to add multiple groups of data.
-func (m *Mesh) Build() {
+func (m *Mesh) Build(mtl Material) {
+	grp := meshGroup{mtl: mtl}
+	if grp.mtl == nil {
+		if m.pointSize != 0 {
+			grp.mtl = PointMaterial()
+		} else {
+			grp.mtl = Diffuse()
+		}
+	}
 	m.ncache.build(m)
 	m.ncache = newNormalCache()
 	cache := map[El]uint32{}
@@ -155,24 +182,26 @@ func (m *Mesh) Build() {
 			m.vdata = append(m.vdata, m.getData(el)...)
 			cache[el] = index
 		}
-		m.edata = append(m.edata, index)
+		grp.edata = append(grp.edata, index)
 	}
-	m.elements = nil
-	fmt.Printf("triangle mesh: %d vertices, %d elements\n", len(m.vdata)/vertexSize, len(m.edata))
+	//fmt.Printf("mesh group %d: %d vertices, %d elements\n", len(m.groups), len(m.vdata)/vertexSize, len(grp.edata))
+	grp.earray = glu.ElementArrayBuffer(grp.edata)
+	m.groups = append(m.groups, grp)
 }
 
-// Enable method loads the vertex and element data on the GPU prior to drawing.
-func (m *Mesh) Enable() {
-	if m.array[m.inverted] == nil {
-		m.array[m.inverted] = glu.NewArray(m.vdata, m.edata, vertexSize)
-	} else {
-		m.array[m.inverted].Enable()
+// Draw method draws the mesh by calling GL DrawElements, pre and post callback functions are called pre and post drawing.
+func (m *Mesh) Draw(setUniforms func(*glu.Program)) {
+	if m.varray[m.inverted] == nil {
+		m.varray[m.inverted] = glu.ArrayBuffer(m.vdata, vertexSize)
 	}
-}
-
-// Draw method draws the mesh by calling GL DrawElements
-func (m *Mesh) Draw() {
-	m.array[m.inverted].Draw(GL.TRIANGLES, winding[m.inverted])
+	for _, grp := range m.groups {
+		m.varray[m.inverted].Enable()
+		grp.earray.Enable()
+		prog := grp.mtl.Enable()
+		setUniforms(prog)
+		grp.earray.Draw(GL.TRIANGLES, winding[m.inverted])
+		grp.mtl.Disable()
+	}
 }
 
 // Invert method reverses the normals and winding order to flip the shape inside out
@@ -187,6 +216,22 @@ func (m *Mesh) Invert() *Mesh {
 		newMesh.vdata[i+5] *= -1
 	}
 	return &newMesh
+}
+
+// Get the material assocociated with the first mesh group
+func (m *Mesh) Material() Material {
+	if len(m.groups) > 0 {
+		return m.groups[0].mtl
+	}
+	return nil
+}
+
+// Update all the materials associated with this mesh.
+func (m *Mesh) SetMaterial(mtl Material) *Mesh {
+	for i := range m.groups {
+		m.groups[i].mtl = mtl
+	}
+	return m
 }
 
 // String method for dumping out contents of the mesh

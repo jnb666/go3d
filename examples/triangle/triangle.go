@@ -57,7 +57,7 @@ func (t *Triangle) initGL(gl *GL.GL) {
 		panic(err)
 	}
 	t.program.Uniform("m4f", "trans")
-	t.buffer = glu.NewArray(vertices, nil, 5)
+	t.buffer = glu.ArrayBuffer(vertices, vertexSize)
 }
 
 func (t *Triangle) Rotate() {

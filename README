@@ -26,9 +26,7 @@ go3d/scene - Scene graph routines [depends on mesh glu]
 	- Light : interface type for directional and point lighs
 
 --TODO--
-- materials loader
 - point of view camera
-- zoom by adjusting FOV
 - optimise render process
 - additional examples: bouncing ball, temple scene
 - shadow mapping

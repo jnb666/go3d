@@ -38,20 +38,20 @@ func (t *Shapes) initialise(gl *GL.GL) {
 	fmt.Println("initialise")
 	glu.Debug = true
 	t.view = scene.NewView(camera).AddLight(light)
-	t.background = scene.NewItem(mesh.Cube().Invert(), mesh.Skybox()).Enable(false)
+	t.background = scene.NewItem(mesh.Cube().Invert().SetMaterial(mesh.Skybox())).Enable(false)
 	t.background.Scale(10, 10, 10)
-	var data []*mesh.Mesh
+	var object []scene.Object
 	for _, name := range meshes {
-		m, err := mesh.LoadObjFile(name + ".obj")
+		obj, err := scene.LoadObjFile(name + ".obj")
 		if err != nil {
 			fmt.Printf("error loading %s: %v\n", name, err)
 		}
-		data = append(data, m)
+		object = append(object, obj)
 	}
 	t.models = map[string]scene.Object{
-		"cube":    scene.NewItem(data[0], mesh.Wood()),
-		"teapot":  scene.NewItem(data[1], mesh.Marble().SetColor(glu.Red)).Scale(0.012, 0.012, 0.012).Translate(0, -0.4, 0),
-		"shuttle": scene.NewGroup().Add(scene.NewItem(data[2], mesh.Plastic().SetColor(glu.Grey)).Scale(0.13, 0.13, 0.13).RotateX(-90)),
+		"cube":    object[0],
+		"teapot":  object[1].Scale(0.012, 0.012, 0.012).Translate(0, -0.4, 0),
+		"shuttle": scene.NewGroup().Add(object[2].Scale(0.13, 0.13, 0.13).RotateX(-90)),
 	}
 	t.modelName = "cube"
 }

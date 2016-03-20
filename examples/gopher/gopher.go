@@ -62,7 +62,7 @@ var (
 		12, 13, 14, 14, 15, 12,
 		16, 17, 18, 18, 19, 16,
 		20, 21, 22, 22, 23, 20,
-		0, 1, 2, 2, 3, 0,
+		24, 25, 26, 26, 27, 24,
 	}
 	attribs = []glu.Attrib{
 		{Name: "position", Size: 3, Offset: 0},
@@ -95,20 +95,22 @@ void main() {
 
 type GopherCube struct {
 	qml.Object
-	step    float32
-	angle   float32
-	program *glu.Program
-	cube    *glu.VertexArray
-	floor   *glu.VertexArray
-	texture glu.Texture
+	step     float32
+	angle    float32
+	program  *glu.Program
+	vertices *glu.VertexArray
+	cube     *glu.VertexArray
+	floor    *glu.VertexArray
+	texture  glu.Texture
 }
 
 func (t *GopherCube) initGL(gl *GL.GL) {
 	fmt.Println("initialise GL")
 
 	// vertex arrays
-	t.cube = glu.NewArray(vertices[:24*5], elements[:36], 5)
-	t.floor = glu.NewArray(vertices[24*5:], elements[36:], 5)
+	t.vertices = glu.ArrayBuffer(vertices, vertexSize)
+	t.cube = glu.ElementArrayBuffer(elements[:36])
+	t.floor = glu.ElementArrayBuffer(elements[36:])
 
 	// load texture
 	img, err := glu.PNGImage("gopher.png")
@@ -145,6 +147,7 @@ func (t *GopherCube) Paint(p *qml.Painter) {
 		t.initGL(gl)
 	}
 	t.texture.Activate()
+	t.vertices.Enable()
 	t.cube.Enable()
 	t.program.Use()
 
