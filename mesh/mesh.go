@@ -7,6 +7,7 @@ import (
 	"github.com/jnb666/go3d/glu"
 	"gopkg.in/qml.v1/gl/es2"
 	"gopkg.in/qml.v1/gl/glbase"
+	"strings"
 )
 
 const vertexSize = 8
@@ -37,6 +38,7 @@ type Mesh struct {
 	normals   []mgl32.Vec3
 	texcoords []mgl32.Vec2
 	elements  []El
+	faces     int
 	ncache    normalCache
 	pointSize int
 }
@@ -50,6 +52,7 @@ type meshGroup struct {
 type normalCache struct {
 	vert2norm map[int]*runningMean
 	elem2vert map[int]int
+	smooth    int
 }
 
 // NewMesh creates a new empty mesh structure
@@ -58,7 +61,7 @@ func New() *Mesh {
 }
 
 func newNormalCache() normalCache {
-	return normalCache{vert2norm: map[int]*runningMean{}, elem2vert: map[int]int{}}
+	return normalCache{vert2norm: map[int]*runningMean{}, elem2vert: map[int]int{}, smooth: 9999}
 }
 
 // Clear method wipes the stored vertex data. It does not erase groups which are already built, call this after Build
@@ -68,6 +71,7 @@ func (m *Mesh) Clear() *Mesh {
 	m.normals = nil
 	m.texcoords = nil
 	m.elements = nil
+	m.faces = 0
 	m.ncache = newNormalCache()
 	return m
 }
@@ -142,19 +146,32 @@ func (m *Mesh) AddFace(el ...El) int {
 				})
 			}
 		}
-		m.ncache.add(normal.Normalize(), len(m.elements), elements)
+		m.ncache.add(normal.Normalize(), m.faces, len(m.elements), elements)
 	}
 	m.elements = append(m.elements, elements...)
+	m.faces++
 	return len(m.elements)
 }
 
+func (m *Mesh) SetNormalSmoothing(opt string) {
+	if strings.ToLower(opt) == "off" {
+		m.ncache.smooth = 0
+	} else {
+		m.ncache.smooth = parseint(opt)
+	}
+}
+
 // update the average normal at each vertex
-func (n normalCache) add(normal mgl32.Vec3, base int, elements []El) {
+func (n normalCache) add(normal mgl32.Vec3, face, base int, elements []El) {
 	for i, el := range elements {
-		if n.vert2norm[el.Vert] == nil {
-			n.vert2norm[el.Vert] = &runningMean{}
+		counter := n.vert2norm[el.Vert]
+		if counter == nil || face-counter.start > n.smooth {
+			// start accumulating data for this normal
+			n.vert2norm[el.Vert] = &runningMean{start: face}
+			counter = n.vert2norm[el.Vert]
 		}
-		n.vert2norm[el.Vert].push(normal)
+		// add to average so far
+		counter.push(normal)
 		n.elem2vert[base+i] = el.Vert
 	}
 }
@@ -194,6 +211,8 @@ func (m *Mesh) Build(mtl Material) {
 	//fmt.Printf("mesh group %d: %d vertices, %d elements\n", len(m.groups), len(m.vdata)/vertexSize, len(grp.edata))
 	grp.earray = glu.ElementArrayBuffer(grp.edata)
 	m.groups = append(m.groups, grp)
+	m.elements = nil
+	m.faces = 0
 }
 
 // Draw method draws the mesh by calling GL DrawElements, setUniforms callback can be used to set uniforms after
@@ -296,6 +315,7 @@ func (m *Mesh) normal(n int) mgl32.Vec3 {
 }
 
 type runningMean struct {
+	start int
 	count float32
 	mean  mgl32.Vec3
 	oldM  mgl32.Vec3

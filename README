@@ -26,7 +26,8 @@ go3d/scene - Scene graph routines [depends on mesh glu]
 	- Light : interface type for directional and point lighs
 
 --TODO--
-- implement mesh smoothing groups
+- textured points
+- render object in wireframe or as point cloud
 - point of view camera
 - additional examples: bouncing ball, temple scene
 - shadow mapping

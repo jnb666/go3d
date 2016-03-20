@@ -17,7 +17,6 @@ var spaces = regexp.MustCompile("[ \t\r]+")
 type objData struct {
 	*Mesh
 	mtl     Material
-	group   int
 	grpName string
 	mtlName string
 }
@@ -59,7 +58,7 @@ func LoadObj(r io.Reader) (m *Mesh, err error) {
 				obj.build(flds[1])
 			}
 		case "s":
-			// TODO
+			obj.Mesh.SetNormalSmoothing(flds[1])
 		case "mtllib":
 			_, err = LoadMtlFile(flds[1])
 		case "usemtl":
@@ -76,18 +75,17 @@ func LoadObj(r io.Reader) (m *Mesh, err error) {
 	if err = scanner.Err(); err != nil {
 		return
 	}
-	obj.build("")
+	obj.build("__END")
 	return obj.Mesh, err
 }
 
 func (o *objData) build(next string) {
-	if o.grpName != "" {
+	if o.grpName != "" || next == "__END" {
 		o.Mesh.Build(o.mtl)
-		size := len(o.Mesh.groups[o.group-1].edata)
+		size := len(o.Mesh.groups[len(o.Mesh.groups)-1].edata)
 		fmt.Printf("group %s with material %s - %d elements\n", o.grpName, o.mtlName, size)
 	}
-	if next != "" {
-		o.group++
+	if next != "" && next != "__END" {
 		o.grpName = next
 	}
 }
@@ -157,7 +155,8 @@ func LoadMtl(r io.Reader) (names []string, err error) {
 		case "Ks":
 			m.specular = parse3fv(flds[1:4])
 		case "Ns":
-			m.shininess = parsef32(flds[1])
+			// increase this since we using blinn phong
+			m.shininess = parsef32(flds[1]) * 2
 		case "Tr":
 			m.alpha = 1 - parsef32(flds[1])
 		case "d":
@@ -194,6 +193,7 @@ type mtlData struct {
 func newMtlData(name string) *mtlData {
 	return &mtlData{
 		name:      name,
+		ambient:   mgl32.Vec3{1, 1, 1},
 		diffuse:   mgl32.Vec3{1, 1, 1},
 		specular:  mgl32.Vec3{0.5, 0.5, 0.5},
 		shininess: 128,
@@ -212,22 +212,19 @@ func (m *mtlData) save() string {
 			panic(err)
 		}
 	}
-	switch {
-	case m.model == 0:
-		mtl = Diffuse().SetColor(color).SetAmbient(0)
-	case m.model == 0 && tex != nil:
-		mtl = DiffuseTex(tex).SetColor(color).SetAmbient(0)
-	case m.model == 1:
-		mtl = Diffuse().SetColor(color)
-	case m.model == 1 && tex != nil:
-		mtl = DiffuseTex(tex).SetColor(color)
-	case m.model == 2 && tex != nil:
-		mtl = ReflectiveTex(m.specular.Vec4(m.alpha), m.shininess, tex).SetColor(color)
-	case m.model == 2:
-		mtl = Reflective(m.specular.Vec4(m.alpha), m.shininess).SetColor(color)
+	ambScale := m.ambient.Vec4(1).Len() / m.diffuse.Vec4(1).Len()
+	switch m.model {
+	case 0:
+		ambScale = 0
+		mtl = DiffuseTex(tex)
+	case 1:
+		mtl = DiffuseTex(tex)
+	case 2:
+		mtl = ReflectiveTex(m.specular.Vec4(m.alpha), m.shininess, tex)
 	default:
 		panic(fmt.Errorf("LoadMtl: illumination model %d not supported\n", m.model))
 	}
+	mtl.SetColor(color).SetAmbient(ambScale)
 	SaveMaterial(m.name, mtl)
 	return m.name
 }

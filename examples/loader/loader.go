@@ -18,7 +18,7 @@ var (
 	lightPos  = glu.Polar{R: 1, Theta: 20, Phi: 90}
 	camera    = scene.ArcBallCamera(cameraPos, mgl32.Vec3{}, 0.5, 5, 10, 170)
 	light     = scene.DirectionalLight(mgl32.Vec3{0.8, 0.8, 0.8}, 0.2, lightPos)
-	meshes    = []string{"cube", "teapot", "shuttle"}
+	meshes    = []string{"cube", "teapot", "shuttle", "bunny", "dragon"}
 )
 
 type mouseInfo struct {
@@ -52,6 +52,8 @@ func (t *Shapes) initialise(gl *GL.GL) {
 		"cube":    scene.NewItem(mdata[0]),
 		"teapot":  scene.NewItem(mdata[1]).Scale(0.012, 0.012, 0.012).Translate(0, -0.4, 0),
 		"shuttle": scene.NewGroup().Add(scene.NewItem(mdata[2]).Scale(0.13, 0.13, 0.13).RotateX(-90)),
+		"bunny":   scene.NewItem(mdata[3]).Scale(0.7, 0.7, 0.7),
+		"dragon":  scene.NewGroup().Add(scene.NewItem(mdata[4]).RotateX(-90)),
 	}
 	t.modelName = "cube"
 }

@@ -101,6 +101,9 @@ func Unshaded() Material {
 
 // Unshaded colored material with texture
 func UnshadedTex(tex glu.Texture) Material {
+	if tex == nil {
+		return Unshaded()
+	}
 	m := newMaterial(glu.White)
 	var cached bool
 	switch tex.(type) {
@@ -152,6 +155,9 @@ func Diffuse() Material {
 
 // Diffuse colored material with texture
 func DiffuseTex(tex glu.Texture) Material {
+	if tex == nil {
+		return Diffuse()
+	}
 	m := newMaterial(glu.White)
 	var cached bool
 	switch tex.(type) {
@@ -198,6 +204,9 @@ func Reflective(specular mgl32.Vec4, shininess float32) Material {
 
 // Reflective material with associated diffuse texture map.
 func ReflectiveTex(specular mgl32.Vec4, shininess float32, tex glu.Texture) Material {
+	if tex == nil {
+		return Reflective(specular, shininess)
+	}
 	m := newMaterial(glu.White)
 	var cached bool
 	switch tex.(type) {
