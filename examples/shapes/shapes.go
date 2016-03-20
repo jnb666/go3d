@@ -73,7 +73,7 @@ func (t *Shapes) initialise() {
 		"cube":        scene.NewItem(mesh.Cube()),
 		"prism":       scene.NewItem(mesh.Prism()).Scale(1.1, 1.1, 1.1),
 		"pyramid":     scene.NewItem(mesh.Cone(4)).Scale(1.4, 1.1, 1.4),
-		"point":       scene.NewItem(mesh.Point(10)).Translate(0.5, 0, 0.5),
+		"point":       scene.NewGroup().Add(scene.NewItem(mesh.Point(10)).Translate(0.5, 0, 0.5)),
 		"plane":       scene.NewItem(mesh.Plane()).Scale(2, 1, 2),
 		"circle":      scene.NewItem(mesh.Circle(60)).Scale(2, 1, 2),
 		"cylinder":    scene.NewGroup().Add(scene.NewItem(mesh.Cylinder(60)).RotateX(90)),
@@ -164,13 +164,15 @@ func (t *Shapes) Paint(p *qml.Painter) {
 	t.view.SetProjection(t.Int("width"), t.Int("height"))
 	glu.Clear(mgl32.Vec4{0.5, 0.5, 1, 1})
 	// set current material
-	if t.shapeName != "point" {
-		t.shapes[t.shapeName].Do(scene.NewTransform(mgl32.Ident4()),
-			func(obj *scene.Item, trans scene.Transform) {
+	t.shapes[t.shapeName].Do(scene.NewTransform(mgl32.Ident4()),
+		func(obj *scene.Item, trans scene.Transform) {
+			if t.shapeName == "point" {
+				obj.SetMaterial(t.material["point"])
+			} else {
 				obj.SetMaterial(t.material[t.matName])
-			},
-		)
-	}
+			}
+		},
+	)
 	// skybox is always centered on the camera
 	if t.background != nil && t.background.Enabled() {
 		t.view.Draw(t.view.CenteredView(), t.background)

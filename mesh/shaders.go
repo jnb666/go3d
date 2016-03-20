@@ -191,6 +191,7 @@ void main() {
 varying vec2 PointLocation;
 uniform vec4 objectColor;
 uniform float pointSize;
+uniform float ambientScale;
 
 void main() {
 	vec2 dist = PointLocation - gl_FragCoord.xy;

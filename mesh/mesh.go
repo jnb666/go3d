@@ -202,11 +202,15 @@ func (m *Mesh) Draw(setUniforms func(*glu.Program)) {
 	if m.varray[m.inverted] == nil {
 		m.varray[m.inverted] = glu.ArrayBuffer(m.vdata, vertexSize)
 	}
+	var lastProg *glu.Program
+	m.varray[m.inverted].Enable()
 	for _, grp := range m.groups {
-		m.varray[m.inverted].Enable()
 		grp.earray.Enable()
 		prog := grp.mtl.Enable()
-		setUniforms(prog)
+		if prog != lastProg {
+			setUniforms(prog)
+			lastProg = prog
+		}
 		grp.earray.Draw(GL.TRIANGLES, winding[m.inverted])
 		grp.mtl.Disable()
 	}

@@ -92,17 +92,14 @@ func SaveMaterial(name string, mtl Material) {
 	mtlCache[strings.ToLower(name)] = mtl
 }
 
-// Unshaded colored material with optional texture
-type unshaded struct {
-	*baseMaterial
-}
-
+// Unshaded colored material
 func Unshaded() Material {
 	m := newMaterial(glu.White)
 	m.prog, _ = getProgram(mUnshaded)
-	return &unshaded{baseMaterial: m}
+	return m
 }
 
+// Unshaded colored material with texture
 func UnshadedTex(tex glu.Texture) Material {
 	m := newMaterial(glu.White)
 	var cached bool
@@ -118,20 +115,6 @@ func UnshadedTex(tex glu.Texture) Material {
 	if !cached {
 		m.prog.Uniform("1i", "tex0")
 	}
-	return &unshaded{baseMaterial: m}
-}
-
-func (m *unshaded) Clone() Material {
-	return &unshaded{m.baseMaterial.clone()}
-}
-
-func (m *unshaded) SetColor(c mgl32.Vec4) Material {
-	m.baseMaterial.color = c
-	return m
-}
-
-func (m *unshaded) SetAmbient(scale float32) Material {
-	m.baseMaterial.ambient = scale
 	return m
 }
 
@@ -144,14 +127,14 @@ func PointMaterial() Material {
 		m.prog.Uniform("v3f", "pointLocation")
 		m.prog.Uniform("1f", "pointSize")
 	}
-	return &unshaded{baseMaterial: m}
+	return m
 }
 
 // Emissive material which looks like it glows
 func Emissive() Material {
 	m := newMaterial(glu.White)
 	m.prog, _ = getProgram(mEmissiveShader)
-	return &unshaded{baseMaterial: m}
+	return m
 }
 
 // Skybox using a cubemap texture
@@ -160,17 +143,14 @@ func Skybox() Material {
 	return UnshadedTex(tex)
 }
 
-// Diffuse colored material with optional texture
-type diffuse struct {
-	*baseMaterial
-}
-
+// Diffuse colored material
 func Diffuse() Material {
 	m := newMaterial(glu.White)
 	m.prog, _ = getProgram(mDiffuse)
-	return &diffuse{baseMaterial: m}
+	return m
 }
 
+// Diffuse colored material with texture
 func DiffuseTex(tex glu.Texture) Material {
 	m := newMaterial(glu.White)
 	var cached bool
@@ -186,20 +166,6 @@ func DiffuseTex(tex glu.Texture) Material {
 	if !cached {
 		m.prog.Uniform("1i", "tex0")
 	}
-	return &diffuse{baseMaterial: m}
-}
-
-func (m *diffuse) Clone() Material {
-	return &diffuse{m.baseMaterial.clone()}
-}
-
-func (m *diffuse) SetColor(c mgl32.Vec4) Material {
-	m.baseMaterial.color = c
-	return m
-}
-
-func (m *diffuse) SetAmbient(scale float32) Material {
-	m.baseMaterial.ambient = scale
 	return m
 }
 
@@ -209,18 +175,19 @@ func Earth() Material {
 	return DiffuseTex(tex)
 }
 
-// Reflective material with optional texture
 type reflective struct {
 	*baseMaterial
 	specular  mgl32.Vec3
 	shininess float32
 }
 
+// Coloured material with specular highlights using Blinn-Phong model
 func Reflective(specular mgl32.Vec4, shininess float32) Material {
 	m := newMaterial(glu.White)
 	var cached bool
 	if m.prog, cached = getProgram(mBlinnPhong); !cached {
-		initReflective(m.prog)
+		m.prog.Uniform("v3f", "specularColor")
+		m.prog.Uniform("1f", "shininess")
 	}
 	return &reflective{
 		baseMaterial: m,
@@ -229,6 +196,7 @@ func Reflective(specular mgl32.Vec4, shininess float32) Material {
 	}
 }
 
+// Reflective material with associated diffuse texture map.
 func ReflectiveTex(specular mgl32.Vec4, shininess float32, tex glu.Texture) Material {
 	m := newMaterial(glu.White)
 	var cached bool
@@ -242,7 +210,8 @@ func ReflectiveTex(specular mgl32.Vec4, shininess float32, tex glu.Texture) Mate
 	}
 	m.tex = append(m.tex, tex)
 	if !cached {
-		initReflective(m.prog)
+		m.prog.Uniform("v3f", "specularColor")
+		m.prog.Uniform("1f", "shininess")
 		m.prog.Uniform("1i", "tex0")
 	}
 	return &reflective{
@@ -252,17 +221,10 @@ func ReflectiveTex(specular mgl32.Vec4, shininess float32, tex glu.Texture) Mate
 	}
 }
 
-func initReflective(prog *glu.Program) {
-	prog.Uniform("v3f", "specularColor")
-	prog.Uniform("1f", "shininess")
-}
-
 func (m *reflective) Clone() Material {
-	return &reflective{
-		baseMaterial: m.baseMaterial.clone(),
-		specular:     m.specular,
-		shininess:    m.shininess,
-	}
+	newMat := *m
+	newMat.baseMaterial = m.baseMaterial.Clone().(*baseMaterial)
+	return &newMat
 }
 
 func (m *reflective) SetColor(c mgl32.Vec4) Material {
@@ -299,7 +261,8 @@ func Wood() Material {
 	m := newMaterial(glu.White)
 	var cached bool
 	if m.prog, cached = getProgram(mWoodShader); !cached {
-		initReflective(m.prog)
+		m.prog.Uniform("v3f", "specularColor")
+		m.prog.Uniform("1f", "shininess")
 		m.prog.Uniform("1i", "tex0", "tex1")
 	}
 	m.tex = append(m.tex, getTexture(tWood), getTexture(tTurbulence))
@@ -316,7 +279,8 @@ func Rough() Material {
 	m.ambient = 0.7
 	var cached bool
 	if m.prog, cached = getProgram(mRoughShader); !cached {
-		initReflective(m.prog)
+		m.prog.Uniform("v3f", "specularColor")
+		m.prog.Uniform("1f", "shininess")
 		m.prog.Uniform("1i", "tex0")
 	}
 	m.tex = append(m.tex, getTexture(tTurbulence))
@@ -332,7 +296,8 @@ func Marble() Material {
 	m := newMaterial(glu.White)
 	var cached bool
 	if m.prog, cached = getProgram(mMarbleShader); !cached {
-		initReflective(m.prog)
+		m.prog.Uniform("v3f", "specularColor")
+		m.prog.Uniform("1f", "shininess")
 		m.prog.Uniform("1i", "tex0")
 	}
 	m.tex = append(m.tex, getTexture(tTurbulence))
@@ -366,7 +331,7 @@ func (m *baseMaterial) Enable() *glu.Program {
 	return m.prog
 }
 
-func (m *baseMaterial) clone() *baseMaterial {
+func (m *baseMaterial) Clone() Material {
 	return &baseMaterial{
 		prog:    m.prog,
 		tex:     append([]glu.Texture{}, m.tex...),
@@ -377,7 +342,17 @@ func (m *baseMaterial) clone() *baseMaterial {
 
 func (m *baseMaterial) Color() mgl32.Vec4 { return m.color }
 
+func (m *baseMaterial) SetColor(c mgl32.Vec4) Material {
+	m.color = c
+	return m
+}
+
 func (m *baseMaterial) Ambient() float32 { return m.ambient }
+
+func (m *baseMaterial) SetAmbient(amb float32) Material {
+	m.ambient = amb
+	return m
+}
 
 func (m *baseMaterial) Disable() {}
 
@@ -398,9 +373,10 @@ func getProgram(id int) (*glu.Program, bool) {
 	}
 	prog.Uniform("m4f", "modelToCamera", "cameraToClip")
 	prog.Uniform("v4f", "objectColor")
+	prog.Uniform("1f", "ambientScale")
 	if id != mPointShader {
 		prog.Uniform("m3f", "normalModelToCamera")
-		prog.Uniform("1f", "texScale", "ambientScale")
+		prog.Uniform("1f", "texScale")
 		prog.Uniform("v3f", "modelScale")
 		prog.Uniform("1i", "numLights")
 		prog.UniformArray(MaxLights, "v4f", "lightPos", "lightCol")
