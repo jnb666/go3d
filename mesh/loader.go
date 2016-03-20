@@ -152,21 +152,25 @@ func LoadMtl(r io.Reader) (names []string, err error) {
 			m.ambient = parse3fv(flds[1:4])
 		case "Kd":
 			m.diffuse = parse3fv(flds[1:4])
+		case "Ke": // emissive?
 		case "Ks":
 			m.specular = parse3fv(flds[1:4])
+		case "Ni": // optical density
 		case "Ns":
 			// increase this since we using blinn phong
 			m.shininess = parsef32(flds[1]) * 2
 		case "Tr":
 			m.alpha = 1 - parsef32(flds[1])
+		case "Tf": // transmission filter
 		case "d":
 			m.alpha = parsef32(flds[1])
 		case "illum":
 			m.model = parseint(flds[1])
+		case "map_Ka": // assume this matches diffuse map
 		case "map_Kd":
 			m.diffuseMap = flds[1]
-		case "Ni", "Ke":
-			// noop
+		case "map_Ks": // specular map: TODO
+		case "bump", "map_bump": // TODO
 		default:
 			fmt.Printf("LoadMtl: skip %s\n", line)
 		}

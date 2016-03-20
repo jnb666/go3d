@@ -9,6 +9,13 @@ Features:
 * Each material can have a custom shader, built in lighting uses Blinn Phong model.
 * Compatible with OpenGL ES2. Tested on Linux and OSX.
 
+Todo:
+* POV camera
+* Normal mapping 
+* Specular highlight maps
+* Shadow mapping
+* Point shadows
+
 Package documentation: <http://godoc.org/github.com/jnb666/go3d>
 
 Contact: John Banks <jnb666@gmail.com>

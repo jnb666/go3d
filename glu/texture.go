@@ -74,12 +74,13 @@ func (t Texture2D) SetImageFile(file string) (Texture2D, error) {
 		return t, err
 	}
 	defer r.Close()
-	return t.SetImage(r, getFormat(file))
+	t.textureBase.name = file
+	return t.SetImage(r, GetFormat(file))
 }
 
 // SetImage loads an image from an io.Reader
 func (t Texture2D) SetImage(r io.Reader, format ImageFormat) (Texture2D, error) {
-	pix, bounds, err := getImage(r, format, t.srgba)
+	pix, bounds, err := getImage(r, format, t.srgba, t.name)
 	if err != nil {
 		return t, err
 	}
@@ -119,13 +120,14 @@ func (t TextureCube) SetImageFile(file string, index int) (TextureCube, error) {
 		return t, err
 	}
 	defer r.Close()
-	return t.SetImage(r, getFormat(file), index)
+	t.textureBase.name = file
+	return t.SetImage(r, GetFormat(file), index)
 }
 
 // SetImage loads an image, if srgba is set then it is converted to linear RGB space.
 // The index is the number of the image in the cubemap.
 func (t TextureCube) SetImage(r io.Reader, format ImageFormat, index int) (TextureCube, error) {
-	pix, bounds, err := getImage(r, format, t.srgba)
+	pix, bounds, err := getImage(r, format, t.srgba, t.name)
 	if err != nil {
 		return t, err
 	}
@@ -165,12 +167,13 @@ func (t Texture3D) SetImageFile(file string, dims []int) (Texture3D, error) {
 		return t, err
 	}
 	defer r.Close()
-	return t.SetImage(r, getFormat(file), dims)
+	t.textureBase.name = file
+	return t.SetImage(r, GetFormat(file), dims)
 }
 
 // SetImage loads an image. dims is required to set the x,y,z mapping.
 func (t Texture3D) SetImage(r io.Reader, format ImageFormat, dims []int) (Texture3D, error) {
-	pix, _, err := getImage(r, format, t.srgba)
+	pix, _, err := getImage(r, format, t.srgba, t.name)
 	if err != nil {
 		return t, err
 	}
@@ -189,6 +192,7 @@ type textureBase struct {
 	tex   []glbase.Texture
 	dims  []int
 	srgba bool
+	name  string
 }
 
 func (t *textureBase) Id() int32 {
@@ -207,8 +211,8 @@ func (t *textureBase) Dims() []int {
 	return t.dims
 }
 
-// derive format from file extension
-func getFormat(name string) ImageFormat {
+// derive image format from file extension
+func GetFormat(name string) ImageFormat {
 	switch path.Ext(name) {
 	case ".png":
 		return PngFormat
@@ -219,7 +223,7 @@ func getFormat(name string) ImageFormat {
 }
 
 // get an image in NRGBA format
-func getImage(r io.Reader, format ImageFormat, hasGamma bool) (pix []uint8, bounds image.Rectangle, err error) {
+func getImage(r io.Reader, format ImageFormat, hasGamma bool, name string) (pix []uint8, bounds image.Rectangle, err error) {
 	var img image.Image
 	switch format {
 	case UnknownFormat:
@@ -246,8 +250,8 @@ func getImage(r io.Reader, format ImageFormat, hasGamma bool) (pix []uint8, boun
 	}
 	dst := image.NewNRGBA(bounds)
 	if hasGamma {
-		fmt.Println("converting image to linear RGB space")
-		img = &toNRGBA{img}
+		fmt.Printf("converting image %s to linear RGB space\n", name)
+		img = &ToNRGBA{img}
 	}
 	draw.Draw(dst, bounds, img, image.ZP, draw.Src)
 	pix = dst.Pix
@@ -255,15 +259,15 @@ func getImage(r io.Reader, format ImageFormat, hasGamma bool) (pix []uint8, boun
 }
 
 // image converter to linearise image which is in srgba format
-type toNRGBA struct {
+type ToNRGBA struct {
 	image.Image
 }
 
-func (t *toNRGBA) ColorModel() color.Model {
+func (t *ToNRGBA) ColorModel() color.Model {
 	return color.NRGBAModel
 }
 
-func (t *toNRGBA) At(x, y int) color.Color {
+func (t *ToNRGBA) At(x, y int) color.Color {
 	ir, ig, ib, ia := t.Image.At(x, y).RGBA()
 	if ia == 0 {
 		return color.NRGBA{}

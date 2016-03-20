@@ -16,9 +16,9 @@ const sceneFile = "shapes.qml"
 var (
 	cameraPos = glu.Polar{R: 2.0, Theta: 70, Phi: 45}
 	lightPos  = glu.Polar{R: 1, Theta: 20, Phi: 90}
-	camera    = scene.ArcBallCamera(cameraPos, mgl32.Vec3{}, 0.5, 5, 10, 170)
+	camera    = scene.ArcBallCamera(cameraPos, mgl32.Vec3{0, 0, 0}, 0.5, 3, 10, 170)
 	light     = scene.DirectionalLight(mgl32.Vec3{0.8, 0.8, 0.8}, 0.2, lightPos)
-	meshes    = []string{"cube", "teapot", "shuttle", "bunny", "dragon"}
+	meshes    = []string{"cube", "teapot", "shuttle", "bunny", "dragon", "sponza"}
 )
 
 type mouseInfo struct {
@@ -39,23 +39,33 @@ func (t *Shapes) initialise(gl *GL.GL) {
 	glu.Debug = true
 	t.view = scene.NewView(camera).AddLight(light)
 	t.background = scene.NewItem(mesh.Cube().Invert().SetMaterial(mesh.Skybox())).Enable(false)
-	t.background.Scale(10, 10, 10)
-	var mdata []*mesh.Mesh
-	for _, name := range meshes {
-		m, err := mesh.LoadObjFile(name + ".obj")
-		if err != nil {
-			fmt.Printf("error loading %s: %v\n", name, err)
-		}
-		mdata = append(mdata, m)
-	}
-	t.models = map[string]scene.Object{
-		"cube":    scene.NewItem(mdata[0]),
-		"teapot":  scene.NewItem(mdata[1]).Scale(0.012, 0.012, 0.012).Translate(0, -0.4, 0),
-		"shuttle": scene.NewGroup().Add(scene.NewItem(mdata[2]).Scale(0.13, 0.13, 0.13).RotateX(-90)),
-		"bunny":   scene.NewItem(mdata[3]).Scale(0.7, 0.7, 0.7),
-		"dragon":  scene.NewGroup().Add(scene.NewItem(mdata[4]).RotateX(-90)),
-	}
+	t.background.Scale(40, 40, 40)
 	t.modelName = "cube"
+	t.models = map[string]scene.Object{}
+}
+
+func (t *Shapes) loadMesh(name string) {
+	if _, loaded := t.models[name]; loaded {
+		return
+	}
+	model, err := mesh.LoadObjFile(name + ".obj")
+	if err != nil {
+		fmt.Printf("error loading %s: %v\n", name, err)
+	}
+	switch t.modelName {
+	case "cube":
+		t.models[name] = scene.NewItem(model)
+	case "teapot":
+		t.models[name] = scene.NewItem(model).Scale(0.012, 0.012, 0.012).Translate(0, -0.4, 0)
+	case "shuttle":
+		t.models[name] = scene.NewGroup().Add(scene.NewItem(model).Scale(0.13, 0.13, 0.13).RotateX(-90))
+	case "bunny":
+		t.models[name] = scene.NewItem(model).Scale(0.7, 0.7, 0.7)
+	case "dragon":
+		t.models[name] = scene.NewGroup().Add(scene.NewItem(model).RotateX(-90))
+	case "sponza":
+		t.models[name] = scene.NewItem(model).Scale(0.5, 0.5, 0.5).Translate(0.5, -1, 0)
+	}
 }
 
 func (t *Shapes) SetModel(name string) {
@@ -104,6 +114,7 @@ func (t *Shapes) Paint(p *qml.Painter) {
 	if t.models == nil {
 		t.initialise(gl)
 	}
+	t.loadMesh(t.modelName)
 	t.view.SetProjection(t.Int("width"), t.Int("height"))
 	glu.Clear(mgl32.Vec4{0.5, 0.5, 1, 1})
 	view := t.view.Camera.ViewMatrix()

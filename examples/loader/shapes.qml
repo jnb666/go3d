@@ -21,7 +21,7 @@ ApplicationWindow {
                 onClicked: shapes.setScenery(checked)
             }            
             ComboBox {
-                model: ["cube", "teapot", "shuttle", "bunny", "dragon"]
+                model: ["cube", "teapot", "shuttle", "bunny", "dragon", "sponza"]
                 onCurrentIndexChanged: shapes.setModel(currentText)
             }
         }
