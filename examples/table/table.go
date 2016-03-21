@@ -84,8 +84,8 @@ func (t *Scene) initialise(gl *GL.GL) scene.Object {
 	return world
 }
 
-func (t *Scene) Zoom(amount int) {
-	t.view.Camera.Zoom(-amount)
+func (t *Scene) Zoom(amount float32) {
+	t.view.Camera.Move(amount)
 	t.Call("update")
 }
 
@@ -95,8 +95,8 @@ func (t *Scene) Mouse(event string, x, y int) {
 		t.mouseX, t.mouseY = x, y
 	case "move":
 		if t.mouseX >= 0 && t.mouseY >= 0 {
-			dx, dy := x-t.mouseX, y-t.mouseY
-			t.view.Camera.Move(dx, dy)
+			dx, dy := float32(x-t.mouseX), float32(y-t.mouseY)
+			t.view.Camera.Rotate(dx, dy)
 			t.mouseX, t.mouseY = x, y
 			t.Call("update")
 		}
@@ -128,7 +128,7 @@ func (t *Scene) Paint(p *qml.Painter) {
 	}
 	t.view.SetProjection(t.Int("width"), t.Int("height"))
 	glu.Clear(glu.Black)
-	trans := t.view.Camera.ViewMatrix()
+	trans := t.view.ViewMatrix()
 	t.view.UpdateLights(trans, t.scene)
 	t.view.Draw(trans, t.scene)
 }

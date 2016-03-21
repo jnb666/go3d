@@ -6,41 +6,74 @@ import GoExtensions 1.0
 
 ApplicationWindow {
     id: root
-    title: "shapes"
-    x: 100; y: 30; minimumWidth: 640; minimumHeight: 640
-    color: "#404040"
+    title: "model"
+    x: 100; y: 30; minimumWidth: 1000; minimumHeight: 800
 
     toolBar:ToolBar {
+        width: root.width
         RowLayout {
-            ToolButton {
+            anchors.fill: parent
+            Button {
                 text: "spin"; checkable: true
-                onClicked: anim.running = checked
+                onClicked: spin.running = checked
             }
-            ToolButton {
-                text: "scenery"; checkable: true
-                onClicked: shapes.setScenery(checked)
-            }            
+            Button {
+                text: "scenery"; checkable: true; checked: true
+                onClicked: model.setScenery(checked)
+            }
+            Button {
+                text: "reset" 
+                onClicked: { model.reset(); move.running = false; moveButton.checked = false }
+            }
+            Button {
+                id: moveButton; text: "move"; checkable: true
+                onClicked: move.running = checked
+            }
+            ComboBox {
+                model: ["arc ball camera", "first person camera"]
+                onCurrentIndexChanged: model.setCamera(currentIndex)
+            }
             ComboBox {
                 model: ["cube", "teapot", "shuttle", "bunny", "dragon", "sponza"]
-                onCurrentIndexChanged: shapes.setModel(currentText)
+                onCurrentIndexChanged: model.setModel(currentText)
             }
         }
     }
-    Shapes {
-        id: shapes
-        anchors.fill: parent
+    Model {
+        id: model; anchors.fill: parent
         Timer {
-            id: anim
-            interval: 20; running: false; repeat: true
-            onTriggered: shapes.spin()
+            id: move; interval: 20; running: false; repeat: true
+            onTriggered: model.move(0.25)
+        }
+        Timer {
+            id: spin; interval: 20; running: false; repeat: true
+            onTriggered: model.spin()
+        }
+        focus: true
+        Keys.onPressed: {
+            if (event.key == Qt.Key_Left) {
+                model.rotate("keys", 2, 0, 0)
+            }
+            if (event.key == Qt.Key_Right) {
+                model.rotate("keys", -2, 0, 0)
+            }
+            if (event.key == Qt.Key_Up) {
+                model.rotate("keys", 0, 2, 0)
+            }
+            if (event.key == Qt.Key_Down) {
+                model.rotate("keys", 0, -2, 0)
+            }
+            if (event.key == Qt.Key_Space) {
+                model.move(2)
+            }
         }
         MouseArea {
             anchors.fill: parent
-            onWheel: shapes.zoom(wheel.angleDelta.y)
+            onWheel: model.move(wheel.angleDelta.y > 0 ? 1 : -1)
             acceptedButtons: Qt.LeftButton | Qt.RightButton
-            onPressed: shapes.mouse("start", mouse.x, mouse.y, mouse.button)
-            onPositionChanged: shapes.mouse("move", mouse.x, mouse.y, mouse.button)
-            onReleased: shapes.mouse("end", 0, 0, mouse.button)
+            onPressed: model.rotate("start", mouse.x, mouse.y, mouse.button)
+            onPositionChanged: model.rotate("move", mouse.x, mouse.y, mouse.button)
+            onReleased: model.rotate("end", 0, 0, mouse.button)
         }
     }
 }

@@ -47,6 +47,7 @@ func Init(glptr *GL.GL) {
 // Clear the screen ready for draing
 func Clear(bg mgl32.Vec4) {
 	gl.Enable(GL.DEPTH_TEST)
+	gl.DepthFunc(GL.LEQUAL)
 	gl.Enable(GL.CULL_FACE)
 	gl.Enable(GL.BLEND)
 	gl.BlendFunc(GL.SRC_ALPHA, GL.ONE_MINUS_SRC_ALPHA)

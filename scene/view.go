@@ -12,11 +12,12 @@ var (
 	Up             mgl32.Vec3 = mgl32.Vec3{0, 1, 0}
 	ZoomScale      float32    = 1.05
 	RotateScale    float32    = 1.0
+	StepSize       float32    = 0.05
 )
 
 // View settings
 type View struct {
-	Camera
+	Camera Camera
 	Lights []*Light
 	Proj   mgl32.Mat4
 	ldata  []*Light
@@ -24,7 +25,7 @@ type View struct {
 	height float32
 }
 
-// Setup a new view
+// Setup a new view, makes a copy of the camera which was passed in
 func NewView(camera Camera) *View {
 	v := new(View)
 	v.Camera = camera
@@ -109,14 +110,66 @@ func (v *View) SetProjection(width, height int) {
 	v.width, v.height = float32(width), float32(height)
 }
 
+// Get the camera view matrix.
+func (v *View) ViewMatrix() mgl32.Mat4 {
+	return mgl32.LookAtV(v.Camera.Eye(), v.Camera.Center(), Up)
+}
+
+// view centerd on camera
+func (v *View) CenteredView() mgl32.Mat4 {
+	pos := v.Camera.Eye()
+	return v.ViewMatrix().Mul4(mgl32.Translate3D(pos[0], pos[1], pos[2]))
+}
+
 // Camera interface type defines the viewing position
 type Camera interface {
-	ViewMatrix() mgl32.Mat4
-	CenteredView() mgl32.Mat4
-	Position() mgl32.Vec3
-	Zoom(amount int)
-	Move(dx, dy int)
-	Direction() mgl32.Vec3
+	Eye() mgl32.Vec3
+	Center() mgl32.Vec3
+	Move(dir float32)
+	Rotate(dx, dy float32)
+	Clone() Camera
+}
+
+type povCamera struct {
+	pos mgl32.Vec3
+	dir mgl32.Vec3
+}
+
+// Create a new point of view camera with yaw and pitch controls.
+func POVCamera(pos mgl32.Vec3, dir mgl32.Vec3) Camera {
+	return &povCamera{pos: pos, dir: dir.Normalize()}
+}
+
+func (c *povCamera) Clone() Camera {
+	cam := *c
+	return &cam
+}
+
+func (c *povCamera) Eye() mgl32.Vec3 {
+	return c.pos
+}
+
+func (c *povCamera) Center() mgl32.Vec3 {
+	return c.pos.Add(c.dir)
+}
+
+// Step forwards if amount > 0 or backwards if amount <0
+func (c *povCamera) Move(amount float32) {
+	c.pos = c.pos.Add(c.dir.Mul(StepSize * amount))
+}
+
+// Change the direction of the camera: dx controls the yaw, dy controls the pitch
+func (c *povCamera) Rotate(dx, dy float32) {
+	c.doRotate(dx, mgl32.Vec3{0, 1, 0})
+	c.doRotate(dy, c.dir.Cross(Up).Normalize())
+}
+
+func (c *povCamera) doRotate(step float32, axis mgl32.Vec3) {
+	angle := mgl32.DegToRad(step) * RotateScale
+	temp := mgl32.QuatRotate(angle, axis)
+	view := mgl32.Quat{V: c.dir}
+	result := temp.Mul(view).Mul(temp.Conjugate())
+	c.dir = result.V
 }
 
 type arcBallCamera struct {
@@ -126,45 +179,42 @@ type arcBallCamera struct {
 	mint, maxt float32
 }
 
-// Creates a new camera positioned at center + toEye vector and looking at center
+// Create a new camera positioned at center + toEye vector and looking at center
 func ArcBallCamera(toEye glu.Polar, center mgl32.Vec3, minZ, maxZ, minTheta, maxTheta float32) Camera {
 	return &arcBallCamera{toEye: toEye, center: center, minz: minZ, maxz: maxZ, mint: minTheta, maxt: maxTheta}
 }
 
-func (c *arcBallCamera) Direction() mgl32.Vec3 {
-	return c.toEye.Vec3().Normalize().Mul(-1)
+func (c *arcBallCamera) Clone() Camera {
+	cam := *c
+	return &cam
 }
 
-func (c *arcBallCamera) Position() mgl32.Vec3 {
+func (c *arcBallCamera) Eye() mgl32.Vec3 {
 	return c.center.Add(c.toEye.Vec3())
 }
 
-func (c *arcBallCamera) ViewMatrix() mgl32.Mat4 {
-	c.toEye.Clamp()
-	return mgl32.LookAtV(c.center.Add(c.toEye.Vec3()), c.center, Up)
+func (c *arcBallCamera) Center() mgl32.Vec3 {
+	return c.center
 }
 
-// view centerd on camera
-func (c *arcBallCamera) CenteredView() mgl32.Mat4 {
-	pos := c.toEye.Vec3()
-	return c.ViewMatrix().Mul4(mgl32.Translate3D(pos[0], pos[1], pos[2]))
-}
-
-// Zoom in if +ve or out if -ve
-func (c *arcBallCamera) Zoom(amount int) {
-	if amount > 0 {
+// Move towards center if dir > 0 or away if dir < 0
+func (c *arcBallCamera) Move(amount float32) {
+	if amount < 0 {
 		c.toEye.R *= ZoomScale
-	} else {
+	} else if amount > 0 {
 		c.toEye.R *= 1.0 / ZoomScale
+
 	}
 	c.toEye.R = glu.Clamp(c.toEye.R, c.minz, c.maxz)
 }
 
-// Rotate the position of the camera around the origin
-func (c *arcBallCamera) Move(dx, dy int) {
-	c.toEye.Phi -= float32(dx) * RotateScale
-	c.toEye.Theta -= float32(dy) * RotateScale
+// Rotate the position of the camera around the origin, where dy is relative to up axis and dx
+// is around a circle in xz plane.
+func (c *arcBallCamera) Rotate(dx, dy float32) {
+	c.toEye.Phi -= dx * RotateScale
+	c.toEye.Theta -= dy * RotateScale
 	c.toEye.Theta = glu.Clamp(c.toEye.Theta, c.mint, c.maxt)
+	c.toEye.Clamp()
 }
 
 // Light struct represents a light source. Col.W() is the ambient scaling factor.
@@ -197,7 +247,7 @@ func PointLight(color mgl32.Vec3, ambient float32, position mgl32.Vec3, attenuat
 }
 
 // Rotate position of directional light
-func (l *Light) Move(dx, dy int) *Light {
+func (l *Light) Rotate(dx, dy float32) *Light {
 	if l.Pos.W() == 0 {
 		polar := new(glu.Polar).Set(l.Pos.Vec3())
 		polar.Phi -= float32(dx) * RotateScale

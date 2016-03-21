@@ -130,8 +130,8 @@ func (t *Shapes) Spin() {
 	t.Call("update")
 }
 
-func (t *Shapes) Zoom(amount int) {
-	t.view.Zoom(-amount)
+func (t *Shapes) Zoom(amount float32) {
+	t.view.Camera.Move(amount)
 	t.Call("update")
 }
 
@@ -141,11 +141,11 @@ func (t *Shapes) Mouse(event string, x, y, button int) {
 		t.mouse = mouseInfo{x, y, button}
 	case "move":
 		if t.mouse.button != 0 {
-			dx, dy := x-t.mouse.x, y-t.mouse.y
+			dx, dy := float32(x-t.mouse.x), float32(y-t.mouse.y)
 			if t.mouse.button == 1 {
-				t.view.Move(dx, dy)
+				t.view.Camera.Rotate(dx, dy)
 			} else {
-				t.view.Lights[0].Move(dx, dy)
+				t.view.Lights[0].Rotate(dx, dy)
 			}
 			t.mouse.x, t.mouse.y = x, y
 			t.Call("update")

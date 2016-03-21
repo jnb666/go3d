@@ -17,7 +17,8 @@ const sceneFile = "shapes.qml"
 var (
 	cameraPos = glu.Polar{R: 2.0, Theta: 70, Phi: 45}
 	lightPos  = glu.Polar{R: 1, Theta: 20, Phi: 90}
-	camera    = scene.ArcBallCamera(cameraPos, mgl32.Vec3{0, 0, 0}, 0.5, 3, 10, 170)
+	rotCamera = scene.ArcBallCamera(cameraPos, mgl32.Vec3{0, 0, 0}, 1, 3, 10, 170)
+	povCamera = scene.POVCamera(mgl32.Vec3{2, -0.25, 0}, mgl32.Vec3{-1, 0.25, 0})
 	light     = scene.DirectionalLight(mgl32.Vec3{0.8, 0.8, 0.8}, 0.2, lightPos)
 	meshes    = []string{"cube", "teapot", "shuttle", "bunny", "dragon", "sponza"}
 )
@@ -26,8 +27,9 @@ type mouseInfo struct {
 	x, y, button int
 }
 
-type Shapes struct {
+type Model struct {
 	qml.Object
+	cameraMode int
 	setModel   string
 	modelName  string
 	models     map[string]scene.Object
@@ -37,18 +39,18 @@ type Shapes struct {
 	loading    sync.Mutex
 }
 
-func (t *Shapes) initialise(gl *GL.GL) {
+func (t *Model) initialise(gl *GL.GL) {
 	fmt.Println("initialise")
 	glu.Debug = true
-	t.view = scene.NewView(camera).AddLight(light)
-	t.background = scene.NewItem(mesh.Cube().Invert().SetMaterial(mesh.Skybox())).Enable(false)
+	t.view = scene.NewView(rotCamera.Clone()).AddLight(light)
+	t.background = scene.NewItem(mesh.Cube().Invert().SetMaterial(mesh.Skybox()))
 	t.background.Scale(40, 40, 40)
 	t.models = map[string]scene.Object{}
 	t.setModel = "cube"
 	t.loadMesh(t.setModel)
 }
 
-func (t *Shapes) loadMesh(name string) {
+func (t *Model) loadMesh(name string) {
 	if _, loaded := t.models[name]; loaded {
 		t.modelName = name
 		return
@@ -75,7 +77,7 @@ func (t *Shapes) loadMesh(name string) {
 	t.modelName = name
 }
 
-func (t *Shapes) SetModel(name string) {
+func (t *Model) SetModel(name string) {
 	if name == "" {
 		return
 	}
@@ -84,42 +86,64 @@ func (t *Shapes) SetModel(name string) {
 	t.Call("update")
 }
 
-func (t *Shapes) Spin() {
+func (t *Model) Spin() {
 	t.models[t.modelName].RotateY(1)
 	t.Call("update")
 }
 
-func (t *Shapes) SetScenery(on bool) {
+func (t *Model) SetScenery(on bool) {
 	t.background.Enable(on)
 	t.Call("update")
 }
 
-func (t *Shapes) Zoom(amount int) {
-	t.view.Camera.Zoom(-amount)
+func (t *Model) SetCamera(mode int) {
+	if mode == t.cameraMode {
+		return
+	}
+	fmt.Println("set camera mode", mode)
+	t.cameraMode = mode
+	t.Reset()
+}
+
+func (t *Model) Reset() {
+	fmt.Println("reset view", rotCamera)
+	if t.cameraMode == 0 {
+		t.view.Camera = rotCamera.Clone()
+	} else {
+		t.view.Camera = povCamera.Clone()
+	}
 	t.Call("update")
 }
 
-func (t *Shapes) Mouse(event string, x, y, button int) {
+func (t *Model) Move(amount float32) {
+	t.view.Camera.Move(amount)
+	t.Call("update")
+}
+
+func (t *Model) Rotate(event string, x, y, button int) {
 	switch event {
 	case "start":
 		t.mouse = mouseInfo{x, y, button}
 	case "move":
 		if t.mouse.button != 0 {
-			dx, dy := x-t.mouse.x, y-t.mouse.y
+			dx, dy := float32(x-t.mouse.x), float32(y-t.mouse.y)
 			if t.mouse.button == 1 {
-				t.view.Camera.Move(dx, dy)
+				t.view.Camera.Rotate(dx, dy)
 			} else {
-				t.view.Lights[0].Move(dx, dy)
+				t.view.Lights[0].Rotate(dx, dy)
 			}
 			t.mouse.x, t.mouse.y = x, y
 			t.Call("update")
 		}
 	case "end":
 		t.mouse.button = 0
+	case "keys":
+		t.view.Camera.Rotate(float32(x), float32(y))
+		t.Call("update")
 	}
 }
 
-func (t *Shapes) Paint(p *qml.Painter) {
+func (t *Model) Paint(p *qml.Painter) {
 	gl := GL.API(p)
 	glu.Init(gl)
 	if t.models == nil {
@@ -137,7 +161,7 @@ func (t *Shapes) Paint(p *qml.Painter) {
 	//fmt.Println("paint", t.modelName)
 	t.view.SetProjection(t.Int("width"), t.Int("height"))
 	glu.Clear(mgl32.Vec4{0.5, 0.5, 1, 1})
-	view := t.view.Camera.ViewMatrix()
+	view := t.view.ViewMatrix()
 	t.view.UpdateLights(view, nil)
 	// skybox is always centered on the camera
 	if t.background != nil && t.background.Enabled() {
@@ -148,7 +172,7 @@ func (t *Shapes) Paint(p *qml.Painter) {
 
 func run() error {
 	qml.RegisterTypes("GoExtensions", 1, 0, []qml.TypeSpec{{
-		Init: func(t *Shapes, obj qml.Object) { t.Object = obj },
+		Init: func(t *Model, obj qml.Object) { t.Object = obj },
 	}})
 	engine := qml.NewEngine()
 	engine.On("quit", func() { os.Exit(0) })

@@ -108,7 +108,7 @@ func (t *GopherCube) Paint(p *qml.Painter) {
 	}
 	t.view.SetProjection(t.Int("width"), t.Int("height"))
 	glu.Clear(glu.Blue)
-	trans := t.view.Camera.ViewMatrix()
+	trans := t.view.ViewMatrix()
 	t.view.UpdateLights(trans, nil)
 	t.view.Draw(trans, t.world)
 }

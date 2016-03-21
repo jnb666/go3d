@@ -10,11 +10,11 @@ Features:
 * Compatible with OpenGL ES2. Tested on Linux and OSX.
 
 Todo:
-* POV camera
 * Normal mapping 
 * Specular highlight maps
 * Shadow mapping
 * Point shadows
+* Collision detection
 
 Package documentation: <http://godoc.org/github.com/jnb666/go3d>
 

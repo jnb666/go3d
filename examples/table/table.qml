@@ -29,7 +29,6 @@ ApplicationWindow {
     Scene {
         id: scene
         anchors.fill: parent
-        focus: true
         MouseArea {
             anchors.fill: parent
             onWheel: scene.zoom(wheel.angleDelta.y)         
