@@ -26,19 +26,9 @@ const (
 
 const gamma = 2.2
 
-// Global texture id number
-var textureId int32
-
-func nextId() int32 {
-	n := textureId
-	textureId++
-	return n
-}
-
 // Texture interface type
 type Texture interface {
-	Id() int32
-	Activate()
+	Activate(id int)
 	Dims() []int
 }
 
@@ -48,7 +38,6 @@ type Texture2D struct{ *textureBase }
 // If clamp is set then clamp to edge, else will wrap texture.
 func NewTexture2D(clamp, srgba bool) Texture2D {
 	t := &textureBase{
-		id:    nextId(),
 		typ:   GL.TEXTURE_2D,
 		tex:   gl.GenTextures(1),
 		srgba: srgba,
@@ -75,13 +64,12 @@ func (t Texture2D) SetImageFile(file string) (Texture2D, error) {
 		return t, err
 	}
 	defer r.Close()
-	t.textureBase.name = file
 	return t.SetImage(r, GetFormat(file))
 }
 
 // SetImage loads an image from an io.Reader
 func (t Texture2D) SetImage(r io.Reader, format ImageFormat) (Texture2D, error) {
-	pix, bounds, err := getImage(r, format, t.srgba, t.name)
+	pix, bounds, err := getImage(r, format, t.srgba)
 	if err != nil {
 		return t, err
 	}
@@ -99,7 +87,6 @@ type TextureCube struct{ *textureBase }
 // NewTextureCube creates a new cubemap texture. If srgba is set then it is converted to linear RGB space.
 func NewTextureCube(srgba bool) TextureCube {
 	t := &textureBase{
-		id:    nextId(),
 		typ:   GL.TEXTURE_CUBE_MAP,
 		tex:   gl.GenTextures(1),
 		srgba: srgba,
@@ -107,7 +94,7 @@ func NewTextureCube(srgba bool) TextureCube {
 	gl.BindTexture(t.typ, t.tex[0])
 	gl.TexParameteri(t.typ, GL.TEXTURE_WRAP_S, GL.CLAMP_TO_EDGE)
 	gl.TexParameteri(t.typ, GL.TEXTURE_WRAP_T, GL.CLAMP_TO_EDGE)
-	gl.TexParameteri(t.typ, GL.TEXTURE_MIN_FILTER, GL.LINEAR_MIPMAP_LINEAR)
+	gl.TexParameteri(t.typ, GL.TEXTURE_MIN_FILTER, GL.LINEAR)
 	gl.TexParameteri(t.typ, GL.TEXTURE_MAG_FILTER, GL.LINEAR)
 	gl.BindTexture(t.typ, 0)
 	CheckError()
@@ -121,14 +108,13 @@ func (t TextureCube) SetImageFile(file string, index int) (TextureCube, error) {
 		return t, err
 	}
 	defer r.Close()
-	t.textureBase.name = file
 	return t.SetImage(r, GetFormat(file), index)
 }
 
 // SetImage loads an image, if srgba is set then it is converted to linear RGB space.
 // The index is the number of the image in the cubemap.
 func (t TextureCube) SetImage(r io.Reader, format ImageFormat, index int) (TextureCube, error) {
-	pix, bounds, err := getImage(r, format, t.srgba, t.name)
+	pix, bounds, err := getImage(r, format, t.srgba)
 	if err != nil {
 		return t, err
 	}
@@ -136,7 +122,6 @@ func (t TextureCube) SetImage(r io.Reader, format ImageFormat, index int) (Textu
 	gl.BindTexture(GL.TEXTURE_CUBE_MAP, t.tex[0])
 	target := GL.TEXTURE_CUBE_MAP_POSITIVE_X + glbase.Enum(index)
 	gl.TexImage2D(target, 0, GL.RGBA, t.dims[0], t.dims[1], 0, GL.RGBA, GL.UNSIGNED_BYTE, pix)
-	gl.GenerateMipmap(GL.TEXTURE_CUBE_MAP)
 	gl.BindTexture(GL.TEXTURE_CUBE_MAP, 0)
 	CheckError()
 	return t, nil
@@ -147,7 +132,6 @@ type Texture3D struct{ *textureBase }
 // NewTexture3D creates a 3D texture mapping.
 func NewTexture3D() Texture3D {
 	t := &textureBase{
-		id:  nextId(),
 		typ: GL.TEXTURE_2D,
 		tex: gl.GenTextures(1),
 	}
@@ -168,13 +152,12 @@ func (t Texture3D) SetImageFile(file string, dims []int) (Texture3D, error) {
 		return t, err
 	}
 	defer r.Close()
-	t.textureBase.name = file
 	return t.SetImage(r, GetFormat(file), dims)
 }
 
 // SetImage loads an image. dims is required to set the x,y,z mapping.
 func (t Texture3D) SetImage(r io.Reader, format ImageFormat, dims []int) (Texture3D, error) {
-	pix, _, err := getImage(r, format, t.srgba, t.name)
+	pix, _, err := getImage(r, format, t.srgba)
 	if err != nil {
 		return t, err
 	}
@@ -188,20 +171,14 @@ func (t Texture3D) SetImage(r io.Reader, format ImageFormat, dims []int) (Textur
 
 // base type for all textures
 type textureBase struct {
-	id    int32
 	typ   glbase.Enum
 	tex   []glbase.Texture
 	dims  []int
 	srgba bool
-	name  string
 }
 
-func (t *textureBase) Id() int32 {
-	return t.id
-}
-
-func (t *textureBase) Activate() {
-	gl.ActiveTexture(GL.TEXTURE0 + glbase.Enum(t.id))
+func (t *textureBase) Activate(id int) {
+	gl.ActiveTexture(GL.TEXTURE0 + glbase.Enum(id))
 	gl.BindTexture(t.typ, t.tex[0])
 	if Debug {
 		CheckError()
@@ -224,14 +201,22 @@ func GetFormat(name string) ImageFormat {
 }
 
 // get an image in NRGBA format
-func getImage(r io.Reader, format ImageFormat, hasGamma bool, name string) (pix []uint8, bounds image.Rectangle, err error) {
+func getImage(r io.Reader, format ImageFormat, hasGamma bool) (pix []uint8, bounds image.Rectangle, err error) {
 	// did we save a copy before?
-	base := strings.Split(path.Base(name), ".")[0]
-	tempfile := path.Join(os.TempDir(), base+"_rgb.png")
-	if tmp, err := os.Open(tempfile); err == nil {
-		r = tmp
-		format = PngFormat
-		hasGamma = false
+	var tempfile string
+	if f, ok := r.(*os.File); ok {
+		base := strings.Split(path.Base(f.Name()), ".")[0]
+		tempfile = path.Join(os.TempDir(), base+"_rgb.png")
+		if tmp, err := os.Open(tempfile); err == nil {
+			// check timestamp
+			fstat, _ := f.Stat()
+			tstat, _ := tmp.Stat()
+			if tstat.ModTime().After(fstat.ModTime()) {
+				r = tmp
+				format = PngFormat
+				hasGamma = false
+			}
+		}
 	}
 	var img image.Image
 	switch format {
@@ -259,15 +244,17 @@ func getImage(r io.Reader, format ImageFormat, hasGamma bool, name string) (pix 
 	}
 	dst := image.NewNRGBA(bounds)
 	if hasGamma {
-		fmt.Printf("converting image %s to linear RGB space\n", name)
 		img = &ToNRGBA{img}
 	}
 	draw.Draw(dst, bounds, img, image.ZP, draw.Src)
 	pix = dst.Pix
 	// save a copy of the output image
-	if out, err := os.Create(tempfile); err == nil {
-		png.Encode(out, dst)
-		out.Close()
+	if tempfile != "" {
+		if out, err := os.Create(tempfile); err == nil {
+			fmt.Printf("save converted image copy as %s\n", tempfile)
+			png.Encode(out, dst)
+			out.Close()
+		}
 	}
 	return pix, bounds, nil
 }

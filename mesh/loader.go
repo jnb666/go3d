@@ -57,7 +57,7 @@ func LoadObj(r io.Reader) (m *Mesh, err error) {
 				obj.build(flds[1])
 			}
 		case "s":
-			obj.Mesh.SetNormalSmoothing(flds[1])
+			obj.Mesh.SetNormalSmoothing(flds[1] != "off")
 		case "mtllib":
 			_, err = LoadMtlFile(flds[1])
 		case "usemtl":

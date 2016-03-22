@@ -160,8 +160,8 @@ func (c *povCamera) Move(amount float32) {
 
 // Change the direction of the camera: dx controls the yaw, dy controls the pitch
 func (c *povCamera) Rotate(dx, dy float32) {
-	c.doRotate(dx, mgl32.Vec3{0, 1, 0})
-	c.doRotate(dy, c.dir.Cross(Up).Normalize())
+	c.doRotate(-dx, mgl32.Vec3{0, 1, 0})
+	c.doRotate(-dy, c.dir.Cross(Up).Normalize())
 }
 
 func (c *povCamera) doRotate(step float32, axis mgl32.Vec3) {

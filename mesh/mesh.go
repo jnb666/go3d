@@ -7,7 +7,6 @@ import (
 	"github.com/jnb666/go3d/glu"
 	"gopkg.in/qml.v1/gl/es2"
 	"gopkg.in/qml.v1/gl/glbase"
-	"strings"
 )
 
 const vertexSize = 8
@@ -53,16 +52,16 @@ type meshGroup struct {
 type normalCache struct {
 	vert2norm map[int]*runningMean
 	elem2vert map[int]int
-	smooth    int
+	smooth    bool
 }
 
 // NewMesh creates a new empty mesh structure
 func New() *Mesh {
-	return &Mesh{ncache: newNormalCache(), groups: []*meshGroup{}}
+	return &Mesh{ncache: newNormalCache(true), groups: []*meshGroup{}}
 }
 
-func newNormalCache() normalCache {
-	return normalCache{vert2norm: map[int]*runningMean{}, elem2vert: map[int]int{}, smooth: 9999}
+func newNormalCache(smooth bool) normalCache {
+	return normalCache{vert2norm: map[int]*runningMean{}, elem2vert: map[int]int{}, smooth: smooth}
 }
 
 // Clear method wipes the stored vertex data. It does not erase groups which are already built, call this after Build
@@ -73,7 +72,7 @@ func (m *Mesh) Clear() *Mesh {
 	m.texcoords = nil
 	m.elements = nil
 	m.faces = 0
-	m.ncache = newNormalCache()
+	m.ncache = newNormalCache(true)
 	return m
 }
 
@@ -154,25 +153,20 @@ func (m *Mesh) AddFace(el ...El) int {
 	return len(m.elements)
 }
 
-func (m *Mesh) SetNormalSmoothing(opt string) {
-	if strings.ToLower(opt) == "off" {
-		m.ncache.smooth = 0
-	} else {
-		m.ncache.smooth = parseint(opt)
-	}
+// If flag is false then turn off smoothing of vertex normals, else start a new smoothing group
+func (m *Mesh) SetNormalSmoothing(on bool) {
+	m.ncache = newNormalCache(on)
 }
 
 // update the average normal at each vertex
 func (n normalCache) add(normal mgl32.Vec3, face, base int, elements []El) {
 	for i, el := range elements {
-		counter := n.vert2norm[el.Vert]
-		if counter == nil || face-counter.start > n.smooth {
+		if n.vert2norm[el.Vert] == nil {
 			// start accumulating data for this normal
-			n.vert2norm[el.Vert] = &runningMean{start: face}
-			counter = n.vert2norm[el.Vert]
+			n.vert2norm[el.Vert] = &runningMean{}
 		}
 		// add to average so far
-		counter.push(normal)
+		n.vert2norm[el.Vert].push(normal)
 		n.elem2vert[base+i] = el.Vert
 	}
 }
@@ -198,7 +192,7 @@ func (m *Mesh) Build(materialName string) {
 		}
 	}
 	m.ncache.build(m)
-	m.ncache = newNormalCache()
+	m.ncache = newNormalCache(true)
 	cache := map[El]uint32{}
 	for _, el := range m.elements {
 		index, ok := cache[el]
@@ -327,7 +321,6 @@ func (m *Mesh) normal(n int) mgl32.Vec3 {
 }
 
 type runningMean struct {
-	start int
 	count float32
 	mean  mgl32.Vec3
 	oldM  mgl32.Vec3

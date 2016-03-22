@@ -310,8 +310,8 @@ func (m *baseMaterial) Enable() *glu.Program {
 	m.prog.Set("objectColor", m.color)
 	m.prog.Set("ambientScale", m.ambient)
 	for i, tex := range m.tex {
-		tex.Activate()
-		m.prog.Set("tex"+strconv.Itoa(i), tex.Id())
+		tex.Activate(i)
+		m.prog.Set("tex"+strconv.Itoa(i), i)
 	}
 	return m.prog
 }

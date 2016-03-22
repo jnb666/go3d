@@ -52,16 +52,16 @@ ApplicationWindow {
         focus: true
         Keys.onPressed: {
             if (event.key == Qt.Key_Left) {
-                model.rotate("keys", 2, 0, 0)
-            }
-            if (event.key == Qt.Key_Right) {
                 model.rotate("keys", -2, 0, 0)
             }
+            if (event.key == Qt.Key_Right) {
+                model.rotate("keys", 2, 0, 0)
+            }
             if (event.key == Qt.Key_Up) {
-                model.rotate("keys", 0, 2, 0)
+                model.rotate("keys", 0, -2, 0)
             }
             if (event.key == Qt.Key_Down) {
-                model.rotate("keys", 0, -2, 0)
+                model.rotate("keys", 0, 2, 0)
             }
             if (event.key == Qt.Key_Space) {
                 model.move(2)
