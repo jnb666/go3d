@@ -100,7 +100,7 @@ func (o *objData) parseVertexData(typ string, data mgl32.Vec3) {
 	case "v":
 		o.AddVertex(data[0], data[1], data[2])
 	case "vt":
-		o.AddTexCoord(data[0], data[1])
+		o.AddTexCoord(data[0], -data[1])
 	case "vn":
 		o.AddNormal(data[0], data[1], data[2])
 	default:
@@ -230,9 +230,10 @@ func (m mtlData) toMaterial() (mtl Material, err error) {
 		} else {
 			return nil, fmt.Errorf("toMaterial: error loading diffuse map for material %s: %s", m.name, err)
 		}
-		if m.specMap != "" {
+		if m.model >= 2 && m.specMap != "" {
 			if tex, err := glu.NewTexture2D(false, true).SetImageFile(m.specMap); err == nil {
 				textures = append(textures, tex)
+				m.specular = mgl32.Vec3{1, 1, 1}
 			} else {
 				return nil, fmt.Errorf("toMaterial: error loading specular map for material %s: %s", m.name, err)
 			}

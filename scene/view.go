@@ -47,7 +47,7 @@ func (v *View) Draw(worldToCamera mgl32.Mat4, scene Object) {
 				prog.Set("pointSize", float32(psize))
 				prog.Set("viewport", v.width, v.height)
 			} else {
-				prog.Set("texScale", o.TexScale)
+				//prog.Set("texScale", o.TexScale)
 				prog.Set("normalModelToCamera", mat.Mat3().Inv().Transpose())
 				prog.Set("modelScale", t.Scale)
 				prog.Set("numLights", len(v.ldata))
@@ -160,7 +160,7 @@ func (c *povCamera) Move(amount float32) {
 
 // Change the direction of the camera: dx controls the yaw, dy controls the pitch
 func (c *povCamera) Rotate(dx, dy float32) {
-	c.doRotate(-dx, mgl32.Vec3{0, 1, 0})
+	c.doRotate(-dx, Up)
 	c.doRotate(-dy, c.dir.Cross(Up).Normalize())
 }
 
@@ -257,4 +257,10 @@ func (l *Light) Rotate(dx, dy float32) *Light {
 		panic("move not implemented for point lights")
 	}
 	return l
+}
+
+// Make a copy of the light struct
+func (l *Light) Clone() *Light {
+	newLight := *l
+	return &newLight
 }

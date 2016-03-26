@@ -10,8 +10,6 @@ Features:
 * Compatible with OpenGL ES2. Tested on Linux and OSX.
 
 Todo:
-* Normal mapping 
-* Specular highlight maps
 * Shadow mapping
 * Point shadows
 * Collision detection

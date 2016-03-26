@@ -67,6 +67,7 @@ func (m ReflectImage) Disable() {
 func (t *GopherCube) initGL(gl *GL.GL) scene.Object {
 	fmt.Println("initialise GL")
 	glu.Init(gl)
+	glu.Debug = true
 	t.view = scene.NewView(camera).AddLight(light)
 
 	// load texture

@@ -135,7 +135,6 @@ type Item struct {
 	Transform
 	*mesh.Mesh
 	Light    *Light
-	TexScale float32
 	lightMat map[bool]mesh.Material
 	enabled  bool
 }
@@ -146,7 +145,6 @@ func NewItem(msh *mesh.Mesh) *Item {
 	obj := new(Item)
 	obj.Mesh = msh
 	obj.Transform = NewTransform(mgl32.Ident4())
-	obj.TexScale = 1
 	obj.enabled = true
 	return obj
 }
@@ -166,10 +164,14 @@ func (o *Item) SetMaterial(mtl mesh.Material) Object {
 func (o *Item) Illuminate(intensity, ambient, attenuation float32) *Item {
 	color := o.Mesh.Material().Color().Vec3().Mul(intensity)
 	o.Light = PointLight(color, ambient, mgl32.Vec3{}, attenuation)
-	o.lightMat = map[bool]mesh.Material{
-		false: o.Mesh.Material(),
-		true:  mesh.Emissive(),
+	var on, off mesh.Material
+	if o.Mesh.PointSize() == 0 {
+		on, off = mesh.Emissive(), o.Mesh.Material()
+	} else {
+		mat := o.Mesh.Material()
+		on, off = mat, mat.Clone().SetColor(mat.Color().Vec3().Mul(0.1).Vec4(1))
 	}
+	o.lightMat = map[bool]mesh.Material{false: off, true: on}
 	return o
 }
 
@@ -197,12 +199,6 @@ func (o *Item) Clone() Object {
 		}
 	}
 	return &item
-}
-
-// TextureScale method adjusts the relative texture scaling
-func (o *Item) TextureScale(scale float32) Object {
-	o.TexScale *= scale
-	return o
 }
 
 // Scale method scales the size of the object

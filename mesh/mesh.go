@@ -9,12 +9,13 @@ import (
 	"gopkg.in/qml.v1/gl/glbase"
 )
 
-const vertexSize = 8
+const vertexSize = 11
 
 var vertexLayout = []glu.Attrib{
 	{Name: "position", Size: 3, Offset: 0},
 	{Name: "normal", Size: 3, Offset: 3},
 	{Name: "texcoord", Size: 2, Offset: 6},
+	{Name: "tangent", Size: 3, Offset: 8},
 }
 
 var vertexLayoutPoints = []glu.Attrib{
@@ -27,6 +28,11 @@ type El struct {
 	Vert, Tex, Norm int
 }
 
+type el2 struct {
+	El
+	tang int
+}
+
 // Mesh type stores a mesh of vertices
 type Mesh struct {
 	inverted  int
@@ -36,8 +42,8 @@ type Mesh struct {
 	vertices  []mgl32.Vec3
 	normals   []mgl32.Vec3
 	texcoords []mgl32.Vec2
-	elements  []El
-	faces     int
+	tangents  []mgl32.Vec3
+	elements  []el2
 	ncache    normalCache
 	pointSize int
 }
@@ -70,8 +76,8 @@ func (m *Mesh) Clear() *Mesh {
 	m.vertices = nil
 	m.normals = nil
 	m.texcoords = nil
+	m.tangents = nil
 	m.elements = nil
-	m.faces = 0
 	m.ncache = newNormalCache(true)
 	return m
 }
@@ -114,43 +120,49 @@ func (m *Mesh) AddTexCoord(tx, ty float32) int {
 
 // Add a triangular or a quad face
 func (m *Mesh) AddFace(el ...El) int {
-	if len(el) != 3 && len(el) != 4 {
+	switch len(el) {
+	case 3:
+		m.addTriangleFace(el[0], el[1], el[2])
+	case 4:
+		m.addTriangleFace(el[0], el[1], el[2])
+		m.addTriangleFace(el[2], el[3], el[0])
+	default:
 		panic("AddFace must have 3 or 4 elements")
 	}
-	calcNormal := false
-	vtx := make([]mgl32.Vec3, len(el))
-	for i, e := range el {
-		if e.Norm == 0 {
-			calcNormal = true
-		}
-		vtx[i] = m.vertex(e.Vert)
-	}
-	var elements []El
-	if len(el) == 3 {
-		elements = []El{el[0], el[1], el[2]}
-	} else {
-		elements = []El{el[0], el[1], el[2], el[2], el[3], el[0]}
-	}
-	if calcNormal {
-		// calculate face normal
-		var normal mgl32.Vec3
-		if len(el) == 3 {
-			normal = vtx[1].Sub(vtx[0]).Cross(vtx[2].Sub(vtx[0]))
-		} else {
-			for i, v := range vtx {
-				v1 := vtx[(i+1)%4]
-				normal = normal.Add(mgl32.Vec3{
-					(v[1] - v1[1]) * (v[2] + v1[2]),
-					(v[2] - v1[2]) * (v[0] + v1[0]),
-					(v[0] - v1[0]) * (v[1] + v1[1]),
-				})
-			}
-		}
-		m.ncache.add(normal.Normalize(), m.faces, len(m.elements), elements)
-	}
-	m.elements = append(m.elements, elements...)
-	m.faces++
 	return len(m.elements)
+}
+
+func (m *Mesh) addTriangleFace(elem ...El) {
+	v0, v1, v2 := m.vertex(elem[0].Vert), m.vertex(elem[1].Vert), m.vertex(elem[2].Vert)
+	edge1, edge2 := v1.Sub(v0), v2.Sub(v0)
+
+	// calculate face normal
+	if elem[0].Norm == 0 || elem[1].Norm == 0 || elem[2].Norm == 0 {
+		normal := edge1.Cross(edge2).Normalize()
+		m.ncache.add(normal, len(m.elements), elem)
+	}
+
+	// calculate tangent vector
+	ntangent := 0
+	if elem[0].Tex != 0 && elem[1].Tex != 0 && elem[2].Tex != 0 {
+		uv0, uv1, uv2 := m.texcoord(elem[0].Tex), m.texcoord(elem[1].Tex), m.texcoord(elem[2].Tex)
+		duv1, duv2 := uv1.Sub(uv0), uv2.Sub(uv0)
+		f := 1 / (duv1[0]*duv2[1] - duv2[0]*duv1[1])
+		tangent := mgl32.Vec3{
+			f * (duv2[1]*edge1[0] - duv1[1]*edge2[0]),
+			f * (duv2[1]*edge1[1] - duv1[1]*edge2[1]),
+			f * (duv2[1]*edge1[2] - duv1[1]*edge2[2]),
+		}.Normalize()
+		m.tangents = append(m.tangents, tangent)
+		ntangent = len(m.tangents)
+	}
+
+	// add to elements array
+	elem2 := make([]el2, 3)
+	for i, el := range elem {
+		elem2[i] = el2{El: el, tang: ntangent}
+	}
+	m.elements = append(m.elements, elem2...)
 }
 
 // If flag is false then turn off smoothing of vertex normals, else start a new smoothing group
@@ -159,7 +171,7 @@ func (m *Mesh) SetNormalSmoothing(on bool) {
 }
 
 // update the average normal at each vertex
-func (n normalCache) add(normal mgl32.Vec3, face, base int, elements []El) {
+func (n normalCache) add(normal mgl32.Vec3, base int, elements []El) {
 	for i, el := range elements {
 		if n.vert2norm[el.Vert] == nil {
 			// start accumulating data for this normal
@@ -193,7 +205,7 @@ func (m *Mesh) Build(materialName string) {
 	}
 	m.ncache.build(m)
 	m.ncache = newNormalCache(true)
-	cache := map[El]uint32{}
+	cache := map[el2]uint32{}
 	for _, el := range m.elements {
 		index, ok := cache[el]
 		if !ok {
@@ -206,29 +218,36 @@ func (m *Mesh) Build(materialName string) {
 	//fmt.Printf("mesh group %d: %d vertices, %d elements\n", len(m.groups), len(m.vdata)/vertexSize, len(grp.edata))
 	m.groups = append(m.groups, grp)
 	m.elements = nil
-	m.faces = 0
+}
+
+func (m *Mesh) loadMaterials() (err error) {
+	for _, grp := range m.groups {
+		if grp.mtl == nil {
+			if grp.mtl, err = LoadMaterial(grp.mtlName); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // Draw method draws the mesh by calling GL DrawElements, setUniforms callback can be used to set uniforms after
 // binding the vertex arrays and enabling the shaders, but prior to drawing.
 func (m *Mesh) Draw(setUniforms func(*glu.Program)) error {
+	if err := m.loadMaterials(); err != nil {
+		return err
+	}
 	if m.varray[m.inverted] == nil {
 		m.varray[m.inverted] = glu.ArrayBuffer(m.vdata, vertexSize)
 	} else {
 		m.varray[m.inverted].Enable()
 	}
 	var lastProg *glu.Program
-	var err error
 	for _, grp := range m.groups {
 		if grp.earray == nil {
 			grp.earray = glu.ElementArrayBuffer(grp.edata)
 		} else {
 			grp.earray.Enable()
-		}
-		if grp.mtl == nil {
-			if grp.mtl, err = LoadMaterial(grp.mtlName); err != nil {
-				return err
-			}
 		}
 		prog := grp.mtl.Enable()
 		if prog != lastProg {
@@ -257,10 +276,13 @@ func (m *Mesh) Invert() *Mesh {
 
 // Get the material assocociated with the first mesh group
 func (m *Mesh) Material() Material {
-	if len(m.groups) > 0 {
-		return m.groups[0].mtl
+	if len(m.groups) == 0 {
+		return nil
 	}
-	return nil
+	if err := m.loadMaterials(); err != nil {
+		return nil
+	}
+	return m.groups[0].mtl
 }
 
 // Update all the materials associated with this mesh.
@@ -279,7 +301,7 @@ func (m *Mesh) String() (s string) {
 	return s
 }
 
-func (m *Mesh) getData(el El) []float32 {
+func (m *Mesh) getData(el el2) []float32 {
 	data := make([]float32, vertexSize)
 	v := m.vertex(el.Vert)
 	copy(data, v[:])
@@ -287,6 +309,9 @@ func (m *Mesh) getData(el El) []float32 {
 	copy(data[3:], vn[:])
 	vt := m.texcoord(el.Tex)
 	copy(data[6:], vt[:])
+	if el.tang > 0 {
+		copy(data[8:], m.tangents[el.tang-1][:])
+	}
 	return data
 }
 

@@ -146,7 +146,7 @@ func (t *GopherCube) Paint(p *qml.Painter) {
 	if t.program == nil {
 		t.initGL(gl)
 	}
-	t.texture.Activate()
+	t.texture.Activate(0)
 	t.vertices.Enable()
 	t.cube.Enable()
 	t.program.Use()

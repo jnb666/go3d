@@ -2,29 +2,48 @@ package mesh
 
 const MaxLights = 4
 
+var numSamplers = map[int]int{
+	mUnshadedTex:        1,
+	mUnshadedTexCube:    1,
+	mDiffuseTex:         1,
+	mDiffuseTexCube:     1,
+	mBlinnPhongTex:      2,
+	mBlinnPhongTexCube:  2,
+	mBlinnPhongTexNorm:  3,
+	mBlinnPhongCubeNorm: 3,
+	mWoodShader:         2,
+	mRoughShader:        1,
+	mMarbleShader:       1,
+}
+
 var vertexShader = `
 attribute vec3 position;
 attribute vec3 normal;
 attribute vec2 texcoord;
+attribute vec3 tangent;
 
 varying vec3 Normal;
 varying vec3 CameraSpacePos;
 varying vec2 Texcoord;
 varying vec3 ModelPos;
+varying mat3 TBN;
 
 uniform mat4 cameraToClip;
 uniform mat4 modelToCamera;
 uniform mat3 normalModelToCamera;
 uniform vec3 modelScale;
-uniform float texScale;
 
 void main() {
 	vec4 pos = modelToCamera * vec4(position, 1.0);
 	gl_Position = cameraToClip * pos;
 	Normal = normalize(normalModelToCamera * normal);
 	CameraSpacePos = pos.xyz;
-	Texcoord = texcoord * texScale;
-	ModelPos = position * modelScale * texScale;
+	Texcoord = texcoord;
+	ModelPos = position * modelScale;
+   	vec3 N = normalize(vec3(modelToCamera * vec4(normal, 0.0)));
+ 	vec3 T = normalize(vec3(modelToCamera * vec4(tangent, 0.0)));
+ 	vec3 B = cross(T, N);
+   	TBN = mat3(T, B, N);
 }
 `
 
@@ -52,6 +71,7 @@ varying vec3 Normal;
 varying vec3 CameraSpacePos;
 varying vec2 Texcoord;
 varying vec3 ModelPos;
+varying mat3 TBN;
 
 #define MAX_LIGHTS 4
 #define GAMMA 2.2
@@ -239,8 +259,8 @@ void main() {
 }
 `,
 	mBlinnPhongTex: fragShaderHead + blinnPhongLighting + `
-uniform sampler2D tex0;
-uniform sampler2D tex1;
+uniform sampler2D tex0;	 // diffuse
+uniform sampler2D tex1;	 // specular
 
 void main() {
 	vec4 C = texture2D(tex0, Texcoord);
@@ -250,13 +270,43 @@ void main() {
 }
 `,
 	mBlinnPhongTexCube: fragShaderHead + blinnPhongLighting + `
-uniform samplerCube tex0;
-uniform samplerCube tex1;
+uniform samplerCube tex0;	 // diffuse
+uniform samplerCube tex1;	 // specular
 
 void main() {
 	vec4 C = textureCube(tex0, ModelPos);
 	vec3 spec = (numTex == 1) ? specularColor : textureCube(tex1, ModelPos).rgb * specularColor;
 	vec3 color = blinnPhongLighting(Normal, objectColor.rgb*C.rgb, spec);
+	gammaCorrect(vec4(color, objectColor.a*C.a));
+}
+`,
+	mBlinnPhongTexNorm: fragShaderHead + blinnPhongLighting + `
+uniform sampler2D tex0;	 // diffuse
+uniform sampler2D tex1;	 // specular
+uniform sampler2D tex2;  // normal
+
+void main() {
+	vec3 N2 = texture2D(tex2, Texcoord).rgb;
+	N2 = normalize(N2*2.0 - 1.0);
+	N2 = normalize(TBN * N2);
+	vec4 C = texture2D(tex0, Texcoord);
+	vec3 spec = texture2D(tex1, Texcoord).rgb * specularColor;
+	vec3 color = blinnPhongLighting(N2, objectColor.rgb*C.rgb, spec);
+	gammaCorrect(vec4(color, objectColor.a*C.a));
+}
+`,
+	mBlinnPhongCubeNorm: fragShaderHead + blinnPhongLighting + `
+uniform samplerCube tex0;  // diffuse
+uniform samplerCube tex1;  // specular
+uniform samplerCube tex2;  // normal
+
+void main() {
+	vec3 N2 = textureCube(tex2, Texcoord).rgb;
+	N2 = normalize(N2*2.0 - 1.0);
+	N2 = normalize(TBN * N2);
+	vec4 C = textureCube(tex0, Texcoord);
+	vec3 spec = textureCube(tex1, Texcoord).rgb * specularColor;
+	vec3 color = blinnPhongLighting(N2, objectColor.rgb*C.rgb, spec);
 	gammaCorrect(vec4(color, objectColor.a*C.a));
 }
 `,

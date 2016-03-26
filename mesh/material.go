@@ -31,9 +31,11 @@ const (
 	mUnshadedTex
 	mDiffuseTex
 	mBlinnPhongTex
+	mBlinnPhongTexNorm
 	mUnshadedTexCube
 	mDiffuseTexCube
 	mBlinnPhongTexCube
+	mBlinnPhongCubeNorm
 	mWoodShader
 	mRoughShader
 	mEmissiveShader
@@ -113,13 +115,13 @@ func saveMaterialData(m *mtlData) {
 func Unshaded(tex ...glu.Texture) Material {
 	m := newMaterial(glu.White)
 	if len(tex) == 0 {
-		m.prog = getProgram(mUnshaded, 0)
+		m.prog = getProgram(mUnshaded)
 	} else {
 		switch tex[0].(type) {
 		case glu.Texture2D:
-			m.prog = getProgram(mUnshadedTex, 1)
+			m.prog = getProgram(mUnshadedTex)
 		case glu.TextureCube:
-			m.prog = getProgram(mUnshadedTexCube, 1)
+			m.prog = getProgram(mUnshadedTexCube)
 		default:
 			panic("unsupported texture type")
 		}
@@ -131,14 +133,14 @@ func Unshaded(tex ...glu.Texture) Material {
 // Material used for drawing points
 func PointMaterial() Material {
 	m := newMaterial(glu.White)
-	m.prog = getProgram(mPointShader, 0)
+	m.prog = getProgram(mPointShader)
 	return m
 }
 
 // Emissive material which looks like it glows
 func Emissive() Material {
 	m := newMaterial(mgl32.Vec4{0.9, 0.9, 0.9, 1})
-	m.prog = getProgram(mEmissiveShader, 0)
+	m.prog = getProgram(mEmissiveShader)
 	return m
 }
 
@@ -151,13 +153,13 @@ func Skybox() Material {
 func Diffuse(tex ...glu.Texture) Material {
 	m := newMaterial(glu.White)
 	if len(tex) == 0 {
-		m.prog = getProgram(mDiffuse, 0)
+		m.prog = getProgram(mDiffuse)
 	} else {
 		switch tex[0].(type) {
 		case glu.Texture2D:
-			m.prog = getProgram(mDiffuseTex, 1)
+			m.prog = getProgram(mDiffuseTex)
 		case glu.TextureCube:
-			m.prog = getProgram(mDiffuseTexCube, 1)
+			m.prog = getProgram(mDiffuseTexCube)
 		default:
 			panic("unsupported texture type")
 		}
@@ -173,17 +175,25 @@ type reflective struct {
 }
 
 // Coloured material with specular highlights using Blinn-Phong model.
-// tex paramater is optional list of associated textures for diffuse and specular map.
+// tex paramater is optional list of associated textures for diffuse, specular and normal map.
 func Reflective(specular mgl32.Vec4, shininess float32, tex ...glu.Texture) Material {
 	m := newMaterial(glu.White)
 	if len(tex) == 0 {
-		m.prog = getProgram(mBlinnPhong, 0)
+		m.prog = getProgram(mBlinnPhong)
 	} else {
 		switch tex[0].(type) {
 		case glu.Texture2D:
-			m.prog = getProgram(mBlinnPhongTex, len(tex))
+			if len(tex) > 2 {
+				m.prog = getProgram(mBlinnPhongTexNorm)
+			} else {
+				m.prog = getProgram(mBlinnPhongTex)
+			}
 		case glu.TextureCube:
-			m.prog = getProgram(mBlinnPhongTexCube, len(tex))
+			if len(tex) > 2 {
+				m.prog = getProgram(mBlinnPhongCubeNorm)
+			} else {
+				m.prog = getProgram(mBlinnPhongTexCube)
+			}
 		default:
 			panic("unsupported texture type")
 		}
@@ -265,7 +275,7 @@ func (m *metallic) SetAmbient(amb float32) Material {
 // 3d Textured wood material
 func Wood() Material {
 	m := newMaterial(glu.White)
-	m.prog = getProgram(mWoodShader, 2)
+	m.prog = getProgram(mWoodShader)
 	m.tex = append(m.tex, getTexture(tWood), getTexture(tTurbulence))
 	return &reflective{
 		baseMaterial: m,
@@ -278,7 +288,7 @@ func Wood() Material {
 func Rough() Material {
 	m := newMaterial(glu.White)
 	m.ambient = 0.3
-	m.prog = getProgram(mRoughShader, 1)
+	m.prog = getProgram(mRoughShader)
 	m.tex = append(m.tex, getTexture(tTurbulence))
 	return &reflective{
 		baseMaterial: m,
@@ -290,7 +300,7 @@ func Rough() Material {
 // Marble textured material
 func Marble() Material {
 	m := newMaterial(glu.White)
-	m.prog = getProgram(mMarbleShader, 1)
+	m.prog = getProgram(mMarbleShader)
 	m.tex = append(m.tex, getTexture(tTurbulence))
 	return &reflective{
 		baseMaterial: m,
@@ -349,7 +359,7 @@ func (m *baseMaterial) SetAmbient(amb float32) Material {
 func (m *baseMaterial) Disable() {}
 
 // compile program and setup default uniforms
-func getProgram(id, ntex int) *glu.Program {
+func getProgram(id int) *glu.Program {
 	if prog, ok := progCache[id]; ok {
 		return prog
 	}
@@ -374,13 +384,12 @@ func getProgram(id, ntex int) *glu.Program {
 		prog.Uniform("1f", "pointSize")
 	} else {
 		prog.Uniform("m3f", "normalModelToCamera")
-		prog.Uniform("1f", "texScale")
 		prog.Uniform("v3f", "modelScale")
 		prog.Uniform("1i", "numLights")
 		prog.UniformArray(MaxLights, "v4f", "lightPos", "lightCol")
 	}
 	prog.Uniform("1i", "numTex")
-	for i := 0; i < ntex; i++ {
+	for i := 0; i < numSamplers[id]; i++ {
 		prog.Uniform("1i", fmt.Sprintf("tex%d", i))
 	}
 	progCache[id] = prog
