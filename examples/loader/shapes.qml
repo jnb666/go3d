@@ -34,7 +34,7 @@ ApplicationWindow {
                 onCurrentIndexChanged: model.setCamera(currentIndex)
             }
             ComboBox {
-                model: ["cube", "teapot", "shuttle", "bunny", "dragon", "sponza"]
+                model: ["cube", "teapot", "shuttle", "bunny", "dragon", "sponza", "sibenik"]
                 onCurrentIndexChanged: model.setModel(currentText)
             }
         }

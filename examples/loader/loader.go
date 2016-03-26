@@ -20,7 +20,15 @@ var (
 	rotCamera = scene.ArcBallCamera(cameraPos, mgl32.Vec3{0, 0, 0}, 1, 3, 10, 170)
 	povCamera = scene.POVCamera(mgl32.Vec3{2, -0.25, 0}, mgl32.Vec3{-1, 0.25, 0})
 	light     = scene.DirectionalLight(mgl32.Vec3{0.8, 0.8, 0.8}, 0.2, lightPos)
-	meshes    = []string{"cube", "teapot", "shuttle", "bunny", "dragon", "sponza"}
+	meshes    = map[string]string{
+		"cube":    "cube.obj",
+		"teapot":  "teapot.obj",
+		"shuttle": "shuttle.obj",
+		"bunny":   "bunny.obj",
+		"dragon":  "dragon.obj",
+		"sponza":  "sponza/sponza.obj",
+		"sibenik": "sibenik/sibenik.obj",
+	}
 )
 
 type mouseInfo struct {
@@ -56,7 +64,7 @@ func (t *Model) loadMesh(name string) {
 		return
 	}
 	fmt.Println("load mesh", name)
-	model, err := mesh.LoadObjFile(name + ".obj")
+	model, err := mesh.LoadObjFile(meshes[name])
 	if err != nil {
 		fmt.Printf("error loading %s: %v\n", name, err)
 	}
@@ -73,6 +81,8 @@ func (t *Model) loadMesh(name string) {
 		t.models[name] = scene.NewGroup().Add(scene.NewItem(model).RotateX(-90))
 	case "sponza":
 		t.models[name] = scene.NewItem(model).Scale(0.5, 0.5, 0.5).Translate(0.5, -1, 0)
+	case "sibenik":
+		t.models[name] = scene.NewItem(model).Scale(0.5, 0.5, 0.5).RotateY(180).Translate(-0.5, 6, 0)
 	}
 	t.modelName = name
 }

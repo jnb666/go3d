@@ -59,13 +59,14 @@ func (t *Shapes) initialise() {
 		"wood":        mesh.Wood(),
 		"rough":       mesh.Rough().SetColor(glu.Grey),
 		"marble":      mesh.Marble(),
+		"metallic":    mesh.Metallic(),
 		"glass":       mesh.Glass(),
 		"earth":       mesh.Earth(),
-		"emissive":    mesh.Emissive().SetColor(mgl32.Vec4{0.95, 0.82, 0.25, 1}),
+		"emissive":    mesh.Emissive().SetColor(mgl32.Vec4{0.8, 0.8, 0.6, 1}),
 		"diffuse":     mesh.Diffuse().SetColor(glu.Red),
 		"unshaded":    mesh.Unshaded().SetColor(glu.Red),
-		"texture2d":   mesh.ReflectiveTex(spec, 32, tex2d),
-		"texturecube": mesh.ReflectiveTex(spec, 32, texCube),
+		"texture2d":   mesh.Reflective(spec, 32, tex2d),
+		"texturecube": mesh.Reflective(spec, 32, texCube),
 		"point":       mesh.PointMaterial().SetColor(glu.Red),
 	}
 	t.shapeName = "cube"
@@ -78,7 +79,7 @@ func (t *Shapes) initialise() {
 		"circle":      scene.NewItem(mesh.Circle(60)).Scale(2, 1, 2),
 		"cylinder":    scene.NewGroup().Add(scene.NewItem(mesh.Cylinder(60)).RotateX(90)),
 		"cone":        scene.NewGroup().Add(scene.NewItem(mesh.Cone(120)).Scale(1.2, 1.2, 1.2).RotateX(90)),
-		"icosohedron": scene.NewItem(mesh.Icosohedron()).Scale(1.5, 1.5, 1.5),
+		"icosohedron": scene.NewItem(mesh.Icosohedron()).Scale(1.6, 1.6, 1.6),
 		"sphere":      scene.NewItem(mesh.Sphere(3)).Scale(1.4, 1.4, 1.4),
 	}
 }

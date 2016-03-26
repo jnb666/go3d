@@ -7,6 +7,7 @@ import (
 	"github.com/jnb666/go3d/glu"
 	"io"
 	"os"
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -14,10 +15,13 @@ import (
 
 var spaces = regexp.MustCompile("[ \t\r]+")
 
+type elements [][]El
+
 type objData struct {
 	*Mesh
-	mtlName string
+	groups  map[string]elements
 	grpName string
+	mtlName string
 }
 
 // Create a new mesh and associated materials from a .obj file
@@ -28,6 +32,9 @@ func LoadObjFile(name string) (m *Mesh, err error) {
 	}
 	defer r.Close()
 	fmt.Println("load mesh from", name)
+	current, _ := os.Getwd()
+	os.Chdir(path.Dir(name))
+	defer os.Chdir(current)
 	return LoadObj(r)
 }
 
@@ -39,7 +46,7 @@ func LoadObj(r io.Reader) (m *Mesh, err error) {
 			err = fmt.Errorf("LoadObj: Error %s parsing line: %s", errPanic, line)
 		}
 	}()
-	obj := &objData{Mesh: New()}
+	obj := &objData{Mesh: New(), groups: map[string]elements{}}
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
 		line = strings.TrimSpace(scanner.Text())
@@ -76,25 +83,26 @@ func LoadObj(r io.Reader) (m *Mesh, err error) {
 	return obj.Mesh, err
 }
 
-func (o *objData) build(next string) {
-	if o.grpName != "" || next == "__END" {
-		o.Mesh.Build(o.mtlName)
-		size := len(o.Mesh.groups[len(o.Mesh.groups)-1].edata)
-		fmt.Printf("group %s with material %s - %d elements\n", o.grpName, o.mtlName, size)
+func (o *objData) build(name string) {
+	for mat, faces := range o.groups {
+		fmt.Printf("group %s with material %s - %d faces\n", o.grpName, mat, len(faces))
+		for _, face := range faces {
+			o.AddFace(face...)
+		}
+		o.Build(mat)
 	}
-	if next != "" && next != "__END" {
-		o.grpName = next
-	}
+	o.grpName = name
+	o.groups = map[string]elements{}
 }
 
 func (o *objData) parseVertexData(typ string, data mgl32.Vec3) {
 	switch typ {
 	case "v":
-		o.Mesh.AddVertex(data[0], data[1], data[2])
+		o.AddVertex(data[0], data[1], data[2])
 	case "vt":
-		o.Mesh.AddTexCoord(data[0], data[1])
+		o.AddTexCoord(data[0], data[1])
 	case "vn":
-		o.Mesh.AddNormal(data[0], data[1], data[2])
+		o.AddNormal(data[0], data[1], data[2])
 	default:
 		panic("unknown vertex type!")
 	}
@@ -109,7 +117,7 @@ func (o *objData) parseFaces(flds []string) {
 		}
 		elem = append(elem, El{el[0], el[1], el[2]})
 	}
-	o.Mesh.AddFace(elem...)
+	o.groups[o.mtlName] = append(o.groups[o.mtlName], elem)
 }
 
 // Load a .mtl file to create one or more new materials, returns list of material names
@@ -166,8 +174,9 @@ func LoadMtl(r io.Reader) (names []string, err error) {
 			m.model = parseint(flds[1])
 		case "map_Ka": // assume this matches diffuse map
 		case "map_Kd":
-			m.diffuseMap = flds[1]
-		case "map_Ks": // specular map: TODO
+			m.diffMap = fullPath(flds[1])
+		case "map_Ks":
+			m.specMap = fullPath(flds[1])
 		case "bump", "map_bump": // TODO
 		default:
 			fmt.Printf("LoadMtl: skip %s\n", line)
@@ -183,15 +192,21 @@ func LoadMtl(r io.Reader) (names []string, err error) {
 	return names, err
 }
 
+func fullPath(name string) string {
+	cwd, _ := os.Getwd()
+	return path.Join(cwd, name)
+}
+
 type mtlData struct {
-	name       string
-	ambient    mgl32.Vec3
-	diffuse    mgl32.Vec3
-	specular   mgl32.Vec3
-	shininess  float32
-	alpha      float32
-	model      int
-	diffuseMap string
+	name      string
+	ambient   mgl32.Vec3
+	diffuse   mgl32.Vec3
+	specular  mgl32.Vec3
+	shininess float32
+	alpha     float32
+	model     int
+	diffMap   string
+	specMap   string
 }
 
 // new material with sensible defaults
@@ -208,11 +223,19 @@ func newMtlData(name string) *mtlData {
 }
 
 func (m mtlData) toMaterial() (mtl Material, err error) {
-	var tex glu.Texture
-	if m.diffuseMap != "" {
-		tex, err = glu.NewTexture2D(false, true).SetImageFile(m.diffuseMap)
-		if err != nil {
-			return nil, fmt.Errorf("toMaterial: error loading texture for material %s: %s", m.name, err)
+	var textures []glu.Texture
+	if m.diffMap != "" {
+		if tex, err := glu.NewTexture2D(false, true).SetImageFile(m.diffMap); err == nil {
+			textures = append(textures, tex)
+		} else {
+			return nil, fmt.Errorf("toMaterial: error loading diffuse map for material %s: %s", m.name, err)
+		}
+		if m.specMap != "" {
+			if tex, err := glu.NewTexture2D(false, true).SetImageFile(m.specMap); err == nil {
+				textures = append(textures, tex)
+			} else {
+				return nil, fmt.Errorf("toMaterial: error loading specular map for material %s: %s", m.name, err)
+			}
 		}
 	}
 	color := m.diffuse.Vec4(m.alpha)
@@ -220,13 +243,11 @@ func (m mtlData) toMaterial() (mtl Material, err error) {
 	switch m.model {
 	case 0:
 		ambScale = 0
-		mtl = DiffuseTex(tex)
+		mtl = Diffuse(textures...)
 	case 1:
-		mtl = DiffuseTex(tex)
-	case 2:
-		mtl = ReflectiveTex(m.specular.Vec4(m.alpha), m.shininess, tex)
+		mtl = Diffuse(textures...)
 	default:
-		panic(fmt.Errorf("toMaterial: illumination model %d not supported\n", m.model))
+		mtl = Reflective(m.specular.Vec4(m.alpha), m.shininess, textures...)
 	}
 	mtl.SetColor(color).SetAmbient(ambScale)
 	return mtl, nil

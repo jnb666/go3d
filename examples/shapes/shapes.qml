@@ -26,7 +26,7 @@ ApplicationWindow {
                 onCurrentIndexChanged: shapes.setShape(currentText)
             }
             ComboBox {
-                model: ["plastic", "wood", "rough", "marble", "glass", "earth", "emissive", "diffuse", "unshaded", "texture2d", "texturecube"]
+                model: ["plastic", "wood", "rough", "marble", "metallic", "glass", "earth", "emissive", "diffuse", "unshaded", "texture2d", "texturecube"]
                 onCurrentIndexChanged: shapes.setMaterial(currentText)
             }
             Button {

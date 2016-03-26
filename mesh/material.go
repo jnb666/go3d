@@ -46,7 +46,10 @@ const (
 	tWood
 	tTurbulence
 	tEarth
+	tEarthSpec
 	tSkybox
+	tMetallic
+	tMetallicSpec
 	tLastTexture
 )
 
@@ -106,80 +109,61 @@ func saveMaterialData(m *mtlData) {
 	mtlDataCache[strings.ToLower(m.name)] = *m
 }
 
-// Unshaded colored material
-func Unshaded() Material {
+// Unshaded colored material with optional texture
+func Unshaded(tex ...glu.Texture) Material {
 	m := newMaterial(glu.White)
-	m.prog = getProgram(mUnshaded)
-	return m
-}
-
-// Unshaded colored material with texture
-func UnshadedTex(tex glu.Texture) Material {
-	if tex == nil {
-		return Unshaded()
+	if len(tex) == 0 {
+		m.prog = getProgram(mUnshaded, 0)
+	} else {
+		switch tex[0].(type) {
+		case glu.Texture2D:
+			m.prog = getProgram(mUnshadedTex, 1)
+		case glu.TextureCube:
+			m.prog = getProgram(mUnshadedTexCube, 1)
+		default:
+			panic("unsupported texture type")
+		}
+		m.tex = append(m.tex, tex[0])
 	}
-	m := newMaterial(glu.White)
-	switch tex.(type) {
-	case glu.Texture2D:
-		m.prog = getProgram(mUnshadedTex)
-	case glu.TextureCube:
-		m.prog = getProgram(mUnshadedTexCube)
-	default:
-		panic("unsupported texture type")
-	}
-	m.tex = append(m.tex, tex)
 	return m
 }
 
 // Material used for drawing points
 func PointMaterial() Material {
 	m := newMaterial(glu.White)
-	m.prog = getProgram(mPointShader)
+	m.prog = getProgram(mPointShader, 0)
 	return m
 }
 
 // Emissive material which looks like it glows
 func Emissive() Material {
-	m := newMaterial(glu.White)
-	m.prog = getProgram(mEmissiveShader)
+	m := newMaterial(mgl32.Vec4{0.9, 0.9, 0.9, 1})
+	m.prog = getProgram(mEmissiveShader, 0)
 	return m
 }
 
 // Skybox using a cubemap texture
 func Skybox() Material {
-	tex := getTexture(tSkybox)
-	return UnshadedTex(tex)
+	return Unshaded(getTexture(tSkybox))
 }
 
-// Diffuse colored material
-func Diffuse() Material {
+// Diffuse colored material with optional texture
+func Diffuse(tex ...glu.Texture) Material {
 	m := newMaterial(glu.White)
-	m.prog = getProgram(mDiffuse)
-	return m
-}
-
-// Diffuse colored material with texture
-func DiffuseTex(tex glu.Texture) Material {
-	if tex == nil {
-		return Diffuse()
+	if len(tex) == 0 {
+		m.prog = getProgram(mDiffuse, 0)
+	} else {
+		switch tex[0].(type) {
+		case glu.Texture2D:
+			m.prog = getProgram(mDiffuseTex, 1)
+		case glu.TextureCube:
+			m.prog = getProgram(mDiffuseTexCube, 1)
+		default:
+			panic("unsupported texture type")
+		}
+		m.tex = append(m.tex, tex[0])
 	}
-	m := newMaterial(glu.White)
-	switch tex.(type) {
-	case glu.Texture2D:
-		m.prog = getProgram(mDiffuseTex)
-	case glu.TextureCube:
-		m.prog = getProgram(mDiffuseTexCube)
-	default:
-		panic("unsupported texture type")
-	}
-	m.tex = append(m.tex, tex)
 	return m
-}
-
-// Earth cubemap
-func Earth() Material {
-	tex := getTexture(tEarth)
-	return DiffuseTex(tex)
 }
 
 type reflective struct {
@@ -188,32 +172,23 @@ type reflective struct {
 	shininess float32
 }
 
-// Coloured material with specular highlights using Blinn-Phong model
-func Reflective(specular mgl32.Vec4, shininess float32) Material {
+// Coloured material with specular highlights using Blinn-Phong model.
+// tex paramater is optional list of associated textures for diffuse and specular map.
+func Reflective(specular mgl32.Vec4, shininess float32, tex ...glu.Texture) Material {
 	m := newMaterial(glu.White)
-	m.prog = getProgram(mBlinnPhong)
-	return &reflective{
-		baseMaterial: m,
-		specular:     specular.Vec3(),
-		shininess:    shininess,
+	if len(tex) == 0 {
+		m.prog = getProgram(mBlinnPhong, 0)
+	} else {
+		switch tex[0].(type) {
+		case glu.Texture2D:
+			m.prog = getProgram(mBlinnPhongTex, len(tex))
+		case glu.TextureCube:
+			m.prog = getProgram(mBlinnPhongTexCube, len(tex))
+		default:
+			panic("unsupported texture type")
+		}
+		m.tex = append(m.tex, tex...)
 	}
-}
-
-// Reflective material with associated diffuse texture map.
-func ReflectiveTex(specular mgl32.Vec4, shininess float32, tex glu.Texture) Material {
-	if tex == nil {
-		return Reflective(specular, shininess)
-	}
-	m := newMaterial(glu.White)
-	switch tex.(type) {
-	case glu.Texture2D:
-		m.prog = getProgram(mBlinnPhongTex)
-	case glu.TextureCube:
-		m.prog = getProgram(mBlinnPhongTexCube)
-	default:
-		panic("unsupported texture type")
-	}
-	m.tex = append(m.tex, tex)
 	return &reflective{
 		baseMaterial: m,
 		specular:     specular.Vec3(),
@@ -256,10 +231,41 @@ func Glass() Material {
 	return mat
 }
 
+// Earth cubemap
+func Earth() Material {
+	return Reflective(mgl32.Vec4{0.5, 0.5, 0.5, 1}, 32, getTexture(tEarth), getTexture(tEarthSpec))
+}
+
+type metallic struct {
+	Material
+}
+
+// Textured metallic material
+func Metallic() Material {
+	return &metallic{
+		Reflective(glu.White, 16, getTexture(tMetallic), getTexture(tMetallicSpec)).SetAmbient(0.3),
+	}
+}
+
+func (m *metallic) Clone() Material {
+	return &metallic{m.Material.Clone()}
+}
+
+func (m *metallic) SetColor(c mgl32.Vec4) Material {
+	m.Material.SetColor(c)
+	m.Material.(*reflective).specular = c.Vec3()
+	return m
+}
+
+func (m *metallic) SetAmbient(amb float32) Material {
+	m.Material.SetAmbient(amb)
+	return m
+}
+
 // 3d Textured wood material
 func Wood() Material {
 	m := newMaterial(glu.White)
-	m.prog = getProgram(mWoodShader)
+	m.prog = getProgram(mWoodShader, 2)
 	m.tex = append(m.tex, getTexture(tWood), getTexture(tTurbulence))
 	return &reflective{
 		baseMaterial: m,
@@ -271,8 +277,8 @@ func Wood() Material {
 // Rough randomly textured material
 func Rough() Material {
 	m := newMaterial(glu.White)
-	m.ambient = 0.7
-	m.prog = getProgram(mRoughShader)
+	m.ambient = 0.3
+	m.prog = getProgram(mRoughShader, 1)
 	m.tex = append(m.tex, getTexture(tTurbulence))
 	return &reflective{
 		baseMaterial: m,
@@ -284,7 +290,7 @@ func Rough() Material {
 // Marble textured material
 func Marble() Material {
 	m := newMaterial(glu.White)
-	m.prog = getProgram(mMarbleShader)
+	m.prog = getProgram(mMarbleShader, 1)
 	m.tex = append(m.tex, getTexture(tTurbulence))
 	return &reflective{
 		baseMaterial: m,
@@ -309,6 +315,7 @@ func (m *baseMaterial) Enable() *glu.Program {
 	m.prog.Use()
 	m.prog.Set("objectColor", m.color)
 	m.prog.Set("ambientScale", m.ambient)
+	m.prog.Set("numTex", len(m.tex))
 	for i, tex := range m.tex {
 		tex.Activate(i)
 		m.prog.Set("tex"+strconv.Itoa(i), i)
@@ -342,7 +349,7 @@ func (m *baseMaterial) SetAmbient(amb float32) Material {
 func (m *baseMaterial) Disable() {}
 
 // compile program and setup default uniforms
-func getProgram(id int) *glu.Program {
+func getProgram(id, ntex int) *glu.Program {
 	if prog, ok := progCache[id]; ok {
 		return prog
 	}
@@ -372,12 +379,9 @@ func getProgram(id int) *glu.Program {
 		prog.Uniform("1i", "numLights")
 		prog.UniformArray(MaxLights, "v4f", "lightPos", "lightCol")
 	}
-	if id == mUnshadedTex || id == mUnshadedTexCube || id == mDiffuseTex || id == mDiffuseTexCube ||
-		id == mBlinnPhongTex || id == mBlinnPhongTexCube || id == mRoughShader || id == mMarbleShader {
-		prog.Uniform("1i", "tex0")
-	}
-	if id == mWoodShader {
-		prog.Uniform("1i", "tex0", "tex1")
+	prog.Uniform("1i", "numTex")
+	for i := 0; i < ntex; i++ {
+		prog.Uniform("1i", fmt.Sprintf("tex%d", i))
 	}
 	progCache[id] = prog
 	return prog
@@ -392,15 +396,19 @@ func getTexture(id int) glu.Texture {
 	var err error
 	switch id {
 	case tWood:
-		//fmt.Println("load texture2D wood")
-		tex, err = glu.NewTexture2D(false, false).SetImage(getImage("wood_rgb.png"), glu.PngFormat)
+		tex, err = glu.NewTexture2D(false, false).SetImage(getImage("wood.png"), glu.PngFormat)
 	case tTurbulence:
-		//fmt.Println("load texture3D turbulence3")
 		tex, err = glu.NewTexture3D().SetImage(getImage("turbulence3.png"), glu.PngFormat, []int{64, 64, 64})
+	case tMetallic:
+		tex, err = glu.NewTexture2D(false, false).SetImage(getImage("metallic.png"), glu.PngFormat)
+	case tMetallicSpec:
+		tex, err = glu.NewTexture2D(false, false).SetImage(getImage("metallic_spec.png"), glu.PngFormat)
 	case tEarth:
-		tex = getTextureCube(tEarth, "earth")
+		tex, err = textureCube("earth")
+	case tEarthSpec:
+		tex, err = textureCube("earth_spec")
 	case tSkybox:
-		tex = getTextureCube(tSkybox, "skybox")
+		tex, err = textureCube("skybox")
 	default:
 		err = fmt.Errorf("unknown texture %d", id)
 	}
@@ -411,18 +419,15 @@ func getTexture(id int) glu.Texture {
 	return tex
 }
 
-func getTextureCube(id int, baseFile string) glu.Texture {
-	if tex, ok := texCache[id]; ok {
-		return tex
-	}
-	//fmt.Printf("load textureCube %s\n", baseFile)
+func textureCube(baseFile string) (glu.Texture, error) {
 	tex := glu.NewTextureCube(false)
 	for i, side := range []string{"posx", "negx", "posy", "negy", "posz", "negz"} {
-		img := getImage(baseFile + "_" + side + "_rgb.png")
-		tex.SetImage(img, glu.PngFormat, i)
+		img := getImage(baseFile + "_" + side + ".png")
+		if _, err := tex.SetImage(img, glu.PngFormat, i); err != nil {
+			return tex, err
+		}
 	}
-	texCache[id] = tex
-	return tex
+	return tex, nil
 }
 
 func getImage(file string) io.Reader {

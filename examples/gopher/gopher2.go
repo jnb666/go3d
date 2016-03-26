@@ -77,10 +77,10 @@ func (t *GopherCube) initGL(gl *GL.GL) scene.Object {
 	}
 
 	// materials
-	gopher := mesh.DiffuseTex(tex)
+	gopher := mesh.Diffuse(tex)
 	floor := ReflectSurface{mesh.Unshaded()}
 	floor.SetColor(glu.Black)
-	reflect := ReflectImage{mesh.DiffuseTex(tex)}
+	reflect := ReflectImage{mesh.Diffuse(tex)}
 	reflect.SetColor(mgl32.Vec4{0.3, 0.3, 0.3, 1})
 
 	// world model

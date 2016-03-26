@@ -48,7 +48,7 @@ func (t *Scene) initialise(gl *GL.GL) scene.Object {
 	world.Add(room)
 
 	// ceiling light
-	t.lamp[0] = scene.NewItem(mesh.Cylinder(30).SetMaterial(mesh.Rough())).Illuminate(2, 0.2, 0.5)
+	t.lamp[0] = scene.NewItem(mesh.Cylinder(60).SetMaterial(mesh.Rough())).Illuminate(2, 0.2, 0.5)
 	t.lamp[0].Scale(0.5, 0.2, 0.5).Translate(0, 3.8, 0)
 	world.Add(t.lamp[0])
 
@@ -71,7 +71,7 @@ func (t *Scene) initialise(gl *GL.GL) scene.Object {
 	t.lamp[1] = scene.NewItem(mesh.Sphere(2).SetMaterial(mesh.Rough())).Illuminate(1, 0.1, 5)
 	t.lamp[1].Light.Col[2] = 0.4
 	lamp := scene.NewGroup()
-	lamp.Add(scene.NewItem(mesh.Cone(30).SetMaterial(redPlastic)).Scale(2, 2, 2).Translate(0, -1, 0))
+	lamp.Add(scene.NewItem(mesh.Cone(60).SetMaterial(redPlastic)).Scale(2, 2, 2).Translate(0, -1, 0))
 	lamp.Add(t.lamp[1])
 	lamp.Scale(0.1, 0.1, 0.1).Translate(-0.5, 1.2, 0)
 	table.Add(lamp)

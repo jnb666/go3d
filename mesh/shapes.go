@@ -158,32 +158,36 @@ func Circle(segments int) *Mesh {
 	m = New()
 	pts := getCircle(segments)
 	doCircle(m, pts, 0, 1)
+	m.Build("")
 	cache[key{mCircle, segments}] = m
 	return m
 }
 
 // draw a circle around the last vertex in the xz plane
-func doCircle(m *Mesh, pts []mgl32.Vec2, y, yNormal float32) {
-	m.AddNormal(0, yNormal, 0)
-	m.AddVertex(0, y, 0)
-	m.AddTexCoord(0.5, 0.5)
-	centre := El{1, 1, 1}
-	for ix, pt := range pts {
+func doCircle(m *Mesh, pts []mgl32.Vec2, y, yNormal float32) int {
+	norm := m.AddNormal(0, yNormal, 0)
+	base := m.AddVertex(0, y, 0)
+	texc := m.AddTexCoord(0.5, 0.5)
+	centre := El{base, texc, norm}
+	for _, pt := range pts {
 		x, z := 0.5*pt[0], 0.5*pt[1]
 		m.AddVertex(x, y, z)
 		m.AddTexCoord(0.5+x, 0.5+yNormal*z)
-		prev := ix + 1
-		if prev == 1 {
-			prev = -1
+	}
+	for ix := range pts {
+		var p1, p2 El
+		if ix == 0 {
+			p1, p2 = El{base + len(pts), texc + len(pts), norm}, El{base + ix + 1, texc + ix + 1, norm}
+		} else {
+			p1, p2 = El{base + ix, texc + ix, norm}, El{base + ix + 1, texc + ix + 1, norm}
 		}
 		if yNormal < 0 {
-			m.AddFace(centre, El{prev, prev, 1}, El{ix + 2, ix + 2, 1})
+			m.AddFace(centre, p1, p2)
 		} else {
-			m.AddFace(centre, El{ix + 2, ix + 2, 1}, El{prev, prev, 1})
+			m.AddFace(centre, p2, p1)
 		}
 	}
-	m.Build("")
-	m.Clear()
+	return base
 }
 
 func getCircle(segments int) []mgl32.Vec2 {
@@ -205,25 +209,24 @@ func Cylinder(segments int) *Mesh {
 	m = New()
 	// ends
 	pts := getCircle(segments)
-	doCircle(m, pts, 0.5, 1)
-	doCircle(m, pts, -0.5, -1)
+	top := doCircle(m, pts, 0.5, 1)
+	base := doCircle(m, pts, -0.5, -1)
 	// sides
 	for i, pt := range pts {
 		tx := 3 * (1 - float32(i)/float32(segments))
-		m.AddNormal(pt[0], 0, pt[1])
-		m.AddVertex(0.5*pt[0], -0.5, 0.5*pt[1])
-		m.AddVertex(0.5*pt[0], 0.5, 0.5*pt[1])
-		m.AddTexCoord(tx, 1)
-		m.AddTexCoord(tx, 0)
+		norm := m.AddNormal(pt[0], 0, pt[1])
+		t1 := m.AddTexCoord(tx, 1)
+		t2 := m.AddTexCoord(tx, 0)
 		if i > 0 {
-			m.AddFace(El{2*i - 1, 2*i - 1, i}, El{2 * i, 2 * i, i},
-				El{2*i + 2, 2*i + 2, i + 1}, El{2*i + 1, 2*i + 1, i + 1})
+			m.AddFace(El{base + i, t1 - 2, norm - 1}, El{top + i, t2 - 2, norm - 1},
+				El{top + i + 1, t2, norm}, El{base + i + 1, t1, norm})
 		}
 	}
 	// close the cylinder
 	m.AddTexCoord(0, 1)
 	m.AddTexCoord(0, 0)
-	m.AddFace(El{-2, -3, -1}, El{-1, -4, -1}, El{2, -2, 1}, El{1, -1, 1})
+	m.AddFace(El{base + segments, -3, -1}, El{top + segments, -4, -1},
+		El{top + 1, -2, -segments}, El{base + 1, -1, -segments})
 	m.Build("")
 	cache[key{mCylinder, segments}] = m
 	return m
@@ -237,41 +240,39 @@ func Cone(segments int) *Mesh {
 		return m.Clone()
 	}
 	m = New()
-	// base
-	pts := getCircle(segments)
-	doCircle(m, pts, -0.5, -1)
-	m.AddTexCoord(1, 1)
-	m.AddTexCoord(0, 1)
 	// top
 	m.AddVertex(0, 0.5, 0)
 	m.AddTexCoord(0.5, 0)
+	// base
+	m.AddTexCoord(1, 1)
+	m.AddTexCoord(0, 1)
+	base := doCircle(m, getCircle(segments), -0.5, -1)
 	// sides
 	n := float32(1 / math.Sqrt2)
-	pts = getCircle(2 * segments)
+	pts := getCircle(2 * segments)
 	for i := 0; i < segments; i++ {
-		m.AddNormal(n*pts[2*i+1][0], n, n*pts[2*i+1][1])
-		m.AddVertex(0.5*pts[2*i][0], -0.5, 0.5*pts[2*i][1])
+		fnorm := m.AddNormal(n*pts[2*i+1][0], n, n*pts[2*i+1][1])
 		if segments <= 8 {
 			// normal for each face
 			if i > 0 {
-				m.AddFace(El{i + 1, 1, i}, El{1, 3, i}, El{i + 2, 2, i})
+				m.AddFace(El{base + i, 2, fnorm - 1}, El{1, 1, fnorm - 1}, El{base + i + 1, 3, fnorm - 1})
 			}
 		} else {
 			tx := 2 * (1 - float32(i)/float32(segments))
-			m.AddTexCoord(tx, 1)
-			m.AddTexCoord(tx, 0)
+			t1 := m.AddTexCoord(tx, 1)
+			t2 := m.AddTexCoord(tx, 0)
 			// normal for each vertex to make this smooth
-			m.AddNormal(n*pts[2*i][0], n, n*pts[2*i][1])
+			vnorm := m.AddNormal(n*pts[2*i][0], n, n*pts[2*i][1])
 			if i > 0 {
-				m.AddFace(El{i + 1, 2*i + 2, 2 * i}, El{1, 2*i + 3, 2*i - 1}, El{i + 2, 2*i + 4, 2*i + 2})
+				m.AddFace(El{base + i, t1 - 2, vnorm - 2}, El{1, t2 - 2, fnorm}, El{base + i + 1, t1, vnorm})
 			}
 		}
 	}
 	// close the surface
 	if segments <= 8 {
-		m.AddFace(El{-1, 1, -1}, El{1, 3, -1}, El{2, 2, -1})
+		m.AddFace(El{base + segments, 2, -1}, El{1, 1, -1}, El{base + 1, 3, -1})
 	} else {
-		m.AddFace(El{-1, -2, -1}, El{1, -1, -1}, El{2, 2, 1})
+		m.AddFace(El{base + segments, -2, -1}, El{1, -1, -1}, El{base + 1, 3, -2 * segments})
 	}
 	m.Build("")
 	cache[key{mCone, segments}] = m
@@ -285,41 +286,66 @@ func Icosohedron() *Mesh {
 		return m.Clone()
 	}
 	m = New()
+	m.SetNormalSmoothing(false)
 	faces := doIcosohedron(m)
-	m.addElementTriangles(faces)
+	m.addElementTriangles(faces, false)
 	m.Build("")
 	cache[key{mIcosohedron, 0}] = m
 	return m
 }
 
-func (m *Mesh) addElementTriangles(faces [][3]int) {
+type point struct {
+	x, y float32
+}
+
+func (m *Mesh) addElementTriangles(faces [][3]int, smooth bool) {
+	elem := make([]El, 3)
+	tex := make([]point, 3)
 	for _, face := range faces {
-		i1, i2, i3 := face[0]+1, face[1]+1, face[2]+1
-		m.AddFace(El{i1, i1, i1}, El{i3, i3, i3}, El{i2, i2, i2})
+		for i, ix := range face {
+			polar := new(glu.Polar).Set(m.vertex(ix).Normalize())
+			tex[i] = point{x: 1 + polar.Phi/180, y: polar.Theta / 180}
+		}
+		for i, ix := range face {
+			elem[i].Vert = ix
+			if smooth {
+				elem[i].Norm = ix
+			}
+			// wrap around the texture to eliminate longditudinal seam
+			if tex[i].x > 1.9 && (tex[(i+1)%3].x < 0.1 || tex[(i+2)%3].x < 0.1) {
+				tex[i].x -= 2
+			}
+			elem[i].Tex = m.AddTexCoord(tex[i].x, tex[i].y)
+		}
+		m.AddFace(elem...)
 	}
 }
 
 func doIcosohedron(m *Mesh) [][3]int {
-	var t = float32((1 + math.Sqrt(5)) / 2)
+	t := float32(1+math.Sqrt(5)) / 2
+
 	// 12 points of the icosohedron
-	m.sphereVertex(-1, t, 0)
-	m.sphereVertex(1, t, 0)
-	m.sphereVertex(-1, -t, 0)
-	m.sphereVertex(1, -t, 0)
-	m.sphereVertex(0, -1, t)
-	m.sphereVertex(0, 1, t)
-	m.sphereVertex(0, -1, -t)
-	m.sphereVertex(0, 1, -t)
-	m.sphereVertex(t, 0, -1)
-	m.sphereVertex(t, 0, 1)
-	m.sphereVertex(-t, 0, -1)
-	m.sphereVertex(-t, 0, 1)
+	m.addSphereVertex(mgl32.Vec3{-1, t, 0})
+	m.addSphereVertex(mgl32.Vec3{1, t, 0})
+	m.addSphereVertex(mgl32.Vec3{-1, -t, 0})
+	m.addSphereVertex(mgl32.Vec3{1, -t, 0})
+
+	m.addSphereVertex(mgl32.Vec3{0, -1, t})
+	m.addSphereVertex(mgl32.Vec3{0, 1, t})
+	m.addSphereVertex(mgl32.Vec3{0, -1, -t})
+	m.addSphereVertex(mgl32.Vec3{0, 1, -t})
+
+	m.addSphereVertex(mgl32.Vec3{t, 0, -1})
+	m.addSphereVertex(mgl32.Vec3{t, 0, 1})
+	m.addSphereVertex(mgl32.Vec3{-t, 0, -1})
+	m.addSphereVertex(mgl32.Vec3{-t, 0, 1})
+
 	// 20 faces in total
 	return [][3]int{
-		{0, 5, 11}, {0, 1, 5}, {0, 7, 1}, {0, 10, 7}, {0, 11, 10},
-		{1, 9, 5}, {5, 4, 11}, {11, 2, 10}, {10, 6, 7}, {7, 8, 1},
-		{3, 4, 9}, {3, 2, 4}, {3, 6, 2}, {3, 8, 6}, {3, 9, 8},
-		{4, 5, 9}, {2, 11, 4}, {6, 10, 2}, {8, 7, 6}, {9, 1, 8},
+		{1, 12, 6}, {1, 6, 2}, {1, 2, 8}, {1, 8, 11}, {1, 11, 12},
+		{2, 6, 10}, {6, 12, 5}, {12, 11, 3}, {11, 8, 7}, {8, 2, 9},
+		{4, 10, 5}, {4, 5, 3}, {4, 3, 7}, {4, 7, 9}, {4, 9, 10},
+		{5, 10, 6}, {3, 5, 12}, {7, 3, 11}, {9, 7, 8}, {10, 9, 2},
 	}
 }
 
@@ -345,7 +371,7 @@ func Sphere(recursionLevel int) *Mesh {
 		}
 		faces = faces2
 	}
-	m.addElementTriangles(faces)
+	m.addElementTriangles(faces, true)
 	m.Build("")
 	cache[key{mSphere, recursionLevel}] = m
 	return m
@@ -362,20 +388,15 @@ func (m *Mesh) getMiddlePoint(scache map[[2]int]int, p [2]int) int {
 		return val
 	}
 	// calc the point
-	middle := m.vertices[p[0]].Add(m.vertices[p[1]])
-	index := m.sphereVertex(middle[0], middle[1], middle[2])
+	index := m.addSphereVertex(m.vertex(p[0]).Add(m.vertex(p[1])))
 	scache[p] = index
 	return index
 }
 
-// SphereVertex adds a new vertex which is on the surface of a shere of unit radius
-func (m *Mesh) sphereVertex(x, y, z float32) int {
-	v := mgl32.Vec3{x, y, z}.Normalize()
-	polar := new(glu.Polar).Set(v)
-	m.AddVertex(v[0]/2, v[1]/2, v[2]/2)
+func (m *Mesh) addSphereVertex(v mgl32.Vec3) int {
+	v = v.Normalize()
 	m.AddNormal(v[0], v[1], v[2])
-	m.AddTexCoord(1+polar.Phi/180, polar.Theta/180)
-	return len(m.vertices) - 1
+	return m.AddVertex(v[0]/2, v[1]/2, v[2]/2)
 }
 
 // Return a range of indices from start to end, inclusive with step of step

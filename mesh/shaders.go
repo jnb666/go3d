@@ -63,6 +63,7 @@ uniform float ambientScale;
 uniform int numLights;
 uniform vec4 lightPos[MAX_LIGHTS];
 uniform vec4 lightCol[MAX_LIGHTS];
+uniform int numTex;
 
 void gammaCorrect(in vec4 color) {
 	gl_FragColor = vec4(pow(color.rgb, vec3(1.0/GAMMA)), color.a);
@@ -139,7 +140,7 @@ vec3 diffuseLighting(in vec3 vertexNormal, in vec3 objColor) {
 `
 
 var blinnPhongLighting = `
-vec3 blinnPhongLighting(in vec3 vertexNormal, in vec3 objColor) {
+vec3 blinnPhongLighting(in vec3 vertexNormal, in vec3 objColor, in vec3 specColor) {
 	vec3 color = vec3(0);
 	vec3 norm = normalize(vertexNormal);
 	for (int i = 0; i < numLights; i++) {
@@ -162,7 +163,7 @@ vec3 blinnPhongLighting(in vec3 vertexNormal, in vec3 objColor) {
 		vec3 viewDir = normalize(-CameraSpacePos);
 		vec3 halfAngle = normalize(lightDir + viewDir);
 		float specular = pow(max(dot(norm, halfAngle), 0.0), shininess);
-		color += specularColor * intensity * specular;
+		color += specColor * intensity * specular;
 	}
 	return color;
 }
@@ -193,6 +194,7 @@ varying vec2 PointLocation;
 uniform vec4 objectColor;
 uniform float pointSize;
 uniform float ambientScale;
+uniform int numTex;
 
 void main() {
 	vec2 dist = PointLocation - gl_FragCoord.xy;
@@ -232,25 +234,29 @@ void main() {
 `,
 	mBlinnPhong: fragShaderHead + blinnPhongLighting + `
 void main() {
-	vec3 color = blinnPhongLighting(Normal, objectColor.rgb);
+	vec3 color = blinnPhongLighting(Normal, objectColor.rgb, specularColor);
 	gammaCorrect(vec4(color, objectColor.a));
 }
 `,
 	mBlinnPhongTex: fragShaderHead + blinnPhongLighting + `
 uniform sampler2D tex0;
+uniform sampler2D tex1;
 
 void main() {
 	vec4 C = texture2D(tex0, Texcoord);
-	vec3 color = blinnPhongLighting(Normal, objectColor.rgb*C.rgb);
+	vec3 spec = (numTex == 1) ? specularColor : texture2D(tex1, Texcoord).rgb * specularColor;
+	vec3 color = blinnPhongLighting(Normal, objectColor.rgb*C.rgb, spec);
 	gammaCorrect(vec4(color, objectColor.a*C.a));
 }
 `,
 	mBlinnPhongTexCube: fragShaderHead + blinnPhongLighting + `
 uniform samplerCube tex0;
+uniform samplerCube tex1;
 
 void main() {
 	vec4 C = textureCube(tex0, ModelPos);
-	vec3 color = blinnPhongLighting(Normal, objectColor.rgb*C.rgb);
+	vec3 spec = (numTex == 1) ? specularColor : textureCube(tex1, ModelPos).rgb * specularColor;
+	vec3 color = blinnPhongLighting(Normal, objectColor.rgb*C.rgb, spec);
 	gammaCorrect(vec4(color, objectColor.a*C.a));
 }
 `,
@@ -261,7 +267,7 @@ uniform sampler2D tex1;
 void main() {
 	vec2 woodPos = vec2(0.5, 0.5) - 0.85*ModelPos.zy - 0.10*ModelPos.x - 0.05*noise3D(tex1, ModelPos*0.5, 1.0).xy;
 	vec3 C = texture2D(tex0, woodPos).rgb;
-	vec3 color = blinnPhongLighting(Normal, objectColor.rgb*C);
+	vec3 color = blinnPhongLighting(Normal, objectColor.rgb*C, specularColor);
 	gammaCorrect(vec4(color, 1.0));
 }
 `,
@@ -271,7 +277,7 @@ uniform sampler2D tex0;
 void main() {
 	vec3 pos = ModelPos + vec3(0.5, 0.5, 0.5);
 	vec3 N2 = Normal + noise3D(tex0, pos, 1.0) * 0.4;
-	vec3 color = blinnPhongLighting(N2, objectColor.rgb);
+	vec3 color = blinnPhongLighting(N2, objectColor.rgb, specularColor);
 	gammaCorrect(vec4(color, objectColor.a));
 }
 `,
@@ -283,7 +289,7 @@ void main() {
 	vec3 noise = noise3D(tex0, pos, 2.0);
 	float a = 0.5 + 0.5*sin(ModelPos.y*16.0 + noise.x*10.0);
 	vec3 C = mix(vec3(0.4,0.3,0.3), vec3(1.0,1.0,1.0), a);
-	vec3 color = blinnPhongLighting(Normal, objectColor.rgb*C);
+	vec3 color = blinnPhongLighting(Normal, objectColor.rgb*C, specularColor);
 	gammaCorrect(vec4(color, objectColor.a));
 }
 `,
