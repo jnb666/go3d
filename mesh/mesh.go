@@ -9,7 +9,10 @@ import (
 	"gopkg.in/qml.v1/gl/glbase"
 )
 
-const vertexSize = 11
+const (
+	vertexSize = 11
+	epsilon    = 1e-6
+)
 
 var vertexLayoutTBN = []glu.Attrib{
 	{Name: "position", Size: 3, Offset: 0},
@@ -70,7 +73,7 @@ type normalCache struct {
 
 // NewMesh creates a new empty mesh structure
 func New() *Mesh {
-	return &Mesh{ncache: newNormalCache(true), groups: []*meshGroup{}, bumpMap: true}
+	return &Mesh{ncache: newNormalCache(false), groups: []*meshGroup{}, bumpMap: true}
 }
 
 func newNormalCache(smooth bool) normalCache {
@@ -128,21 +131,38 @@ func (m *Mesh) AddTexCoord(tx, ty float32) int {
 // Add a triangular or a quad face
 func (m *Mesh) AddFace(el ...El) int {
 	calcNormal := false
+	calcTangent := true
 	vtx := make([]mgl32.Vec3, len(el))
+	tex := make([]mgl32.Vec2, len(el))
 	for i, e := range el {
 		if e.Norm == 0 {
 			calcNormal = true
 		}
 		vtx[i] = m.vertex(e.Vert)
+		if e.Tex == 0 {
+			calcTangent = false
+		} else {
+			tex[i] = m.texcoord(e.Tex)
+		}
+	}
+	base := len(m.elements)
+	ntangent := 0
+	if calcTangent {
+		if tangent, ok := getTangent(vtx, tex); ok {
+			m.tangents = append(m.tangents, tangent)
+			ntangent = len(m.tangents)
+		}
 	}
 	switch len(el) {
 	case 3:
+		m.addElements(ntangent, el)
 		if calcNormal {
 			normal := vtx[1].Sub(vtx[0]).Cross(vtx[2].Sub(vtx[0]))
-			m.ncache.add(normal.Normalize(), len(m.elements), el)
+			m.ncache.add(m, normal.Normalize(), base, el)
 		}
-		m.addTriangleFace(el[0], el[1], el[2])
 	case 4:
+		elquad := []El{el[0], el[1], el[2], el[0], el[2], el[3]}
+		m.addElements(ntangent, elquad)
 		if calcNormal {
 			normal := mgl32.Vec3{}
 			for i, v := range vtx {
@@ -153,56 +173,58 @@ func (m *Mesh) AddFace(el ...El) int {
 					(v[0] - v1[0]) * (v[1] + v1[1]),
 				})
 			}
-			m.ncache.add(normal.Normalize(), len(m.elements), []El{el[0], el[1], el[2], el[2], el[3], el[0]})
+			m.ncache.add(m, normal.Normalize(), base, elquad)
 		}
-		m.addTriangleFace(el[0], el[1], el[2])
-		m.addTriangleFace(el[2], el[3], el[0])
 	default:
 		panic("AddFace must have 3 or 4 elements")
 	}
 	return len(m.elements)
 }
 
-func (m *Mesh) addTriangleFace(elem ...El) {
-	v0, v1, v2 := m.vertex(elem[0].Vert), m.vertex(elem[1].Vert), m.vertex(elem[2].Vert)
-	edge1, edge2 := v1.Sub(v0), v2.Sub(v0)
-	// calculate tangent vector
-	ntangent := 0
-	if elem[0].Tex != 0 && elem[1].Tex != 0 && elem[2].Tex != 0 {
-		uv0, uv1, uv2 := m.texcoord(elem[0].Tex), m.texcoord(elem[1].Tex), m.texcoord(elem[2].Tex)
-		duv1, duv2 := uv1.Sub(uv0), uv2.Sub(uv0)
-		f := 1 / (duv1[0]*duv2[1] - duv2[0]*duv1[1])
-		tangent := mgl32.Vec3{
-			f * (duv2[1]*edge1[0] - duv1[1]*edge2[0]),
-			f * (duv2[1]*edge1[1] - duv1[1]*edge2[1]),
-			f * (duv2[1]*edge1[2] - duv1[1]*edge2[2]),
-		}.Normalize()
-		m.tangents = append(m.tangents, tangent)
-		ntangent = len(m.tangents)
+func (m *Mesh) addElements(ntangent int, elems []El) {
+	for _, elem := range elems {
+		m.elements = append(m.elements, el2{El: elem, tang: ntangent})
 	}
-	// add to elements array
-	elem2 := make([]el2, 3)
-	for i, el := range elem {
-		elem2[i] = el2{El: el, tang: ntangent}
+}
+
+// calc tangent vector for triangle
+func getTangent(vtx []mgl32.Vec3, tex []mgl32.Vec2) (tangent mgl32.Vec3, ok bool) {
+	dy1 := tex[1][1] - tex[0][1]
+	dy2 := tex[2][1] - tex[0][1]
+	f := (tex[1][0]-tex[0][0])*dy2 - (tex[2][0]-tex[0][0])*dy1
+	// ensure that triangle is not of zero height
+	if abs(dy1) < epsilon || abs(dy2) < epsilon || abs(f) < epsilon {
+		return
 	}
-	m.elements = append(m.elements, elem2...)
+	// calculate tangent vector in texture coordinate space
+	edge1, edge2 := vtx[1].Sub(vtx[0]), vtx[2].Sub(vtx[0])
+	tangent = edge1.Mul(dy2 / f).Sub(edge2.Mul(dy1 / f)).Normalize()
+	return tangent, true
 }
 
 // If flag is false then turn off smoothing of vertex normals, else start a new smoothing group
 func (m *Mesh) SetNormalSmoothing(on bool) {
+	m.ncache.build(m)
 	m.ncache = newNormalCache(on)
 }
 
 // update the average normal at each vertex
-func (n normalCache) add(normal mgl32.Vec3, base int, elements []El) {
-	for i, el := range elements {
-		if n.vert2norm[el.Vert] == nil {
-			// start accumulating data for this normal
-			n.vert2norm[el.Vert] = &runningMean{}
+func (n normalCache) add(m *Mesh, norm mgl32.Vec3, base int, elements []El) {
+	if n.smooth {
+		for i, el := range elements {
+			if n.vert2norm[el.Vert] == nil {
+				// start accumulating data for this normal
+				n.vert2norm[el.Vert] = &runningMean{}
+			}
+			// add to average so far
+			n.vert2norm[el.Vert].push(norm)
+			n.elem2vert[base+i] = el.Vert
 		}
-		// add to average so far
-		n.vert2norm[el.Vert].push(normal)
-		n.elem2vert[base+i] = el.Vert
+	} else {
+		normal := m.AddNormal(norm[0], norm[1], norm[2])
+		for i := range elements {
+			m.elements[base+i].Norm = normal
+		}
 	}
 }
 
@@ -210,8 +232,7 @@ func (n normalCache) add(normal mgl32.Vec3, base int, elements []El) {
 func (n normalCache) build(m *Mesh) {
 	for i, vid := range n.elem2vert {
 		norm := n.vert2norm[vid].mean
-		m.AddNormal(norm[0], norm[1], norm[2])
-		m.elements[i].Norm = len(m.normals)
+		m.elements[i].Norm = m.AddNormal(norm[0], norm[1], norm[2])
 	}
 }
 
@@ -384,4 +405,11 @@ func (s *runningMean) push(val mgl32.Vec3) {
 	s.count++
 	s.mean = s.oldM.Add(val.Sub(s.oldM).Mul(1 / s.count))
 	s.oldM = s.mean
+}
+
+func abs(x float32) float32 {
+	if x >= 0 {
+		return x
+	}
+	return -x
 }

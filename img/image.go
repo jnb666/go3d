@@ -13,6 +13,8 @@ import (
 	"math"
 	"os"
 	"path"
+	"runtime"
+	"sync"
 )
 
 type ImageConvert int
@@ -22,6 +24,12 @@ const (
 	SRGBToLinear
 	BumpToNormal
 )
+
+var Threads int
+
+func init() {
+	Threads = runtime.NumCPU()
+}
 
 // Get an image pixels in NRGBA format
 func Decode(r io.Reader, mode ImageConvert) ([]uint8, image.Rectangle, error) {
@@ -45,19 +53,19 @@ func Decode(r io.Reader, mode ImageConvert) ([]uint8, image.Rectangle, error) {
 		}
 	}
 	// apply conversions
-	fmt.Println("convert image", name)
-	conv := newConverter()
+	fmt.Println("convert image", path.Base(name))
+	conv := NewConverter()
 	switch mode {
 	case NoConvert:
-		conv.add(draw.Src)
+		conv.Add(draw.Src)
 	case SRGBToLinear:
-		conv.add(colorFilter{fn: ungamma})
+		conv.Add(ColorFilter(Ungamma))
 	case BumpToNormal:
-		conv.add(blurFilter{radius: 1}, sobelFilter{strength: 1})
+		conv.Add(BlurFilter{Radius: 1.5, Clamp: true}, SobelFilter{Strength: 1.25, Clamp: true})
 	default:
 		panic("unknown conversion mode!")
 	}
-	dst := conv.apply(src)
+	dst := conv.Apply(src)
 	// save converted image
 	if tempfile != "" {
 		if out, err := os.Create(tempfile); err == nil {
@@ -93,43 +101,56 @@ func cachedFile(r io.Reader, mode ImageConvert) (*os.File, string, string) {
 }
 
 // Apply a series of image compositing functions
-type converter struct {
+type Converter struct {
 	filters []draw.Drawer
 }
 
-func newConverter() *converter {
-	return &converter{filters: []draw.Drawer{}}
+func NewConverter() *Converter {
+	return &Converter{filters: []draw.Drawer{}}
 }
 
-func (c *converter) add(filter ...draw.Drawer) {
+func (c *Converter) Add(filter ...draw.Drawer) {
 	c.filters = append(c.filters, filter...)
 }
 
-func (c *converter) apply(src image.Image) *image.NRGBA {
+func (c *Converter) Apply(src image.Image) *image.NRGBA {
 	var dst *image.NRGBA
 	bounds := src.Bounds()
+	width, height := bounds.Dx(), bounds.Dy()
+	yslice := max(height/Threads, 16)
 	for _, filter := range c.filters {
 		dst = image.NewNRGBA(bounds)
-		filter.Draw(dst, bounds, src, image.ZP)
+		// parallelise across sections of the image
+		var wg sync.WaitGroup
+		ypos := 0
+		for ypos < height {
+			wg.Add(1)
+			go func(f draw.Drawer, y0 int) {
+				defer wg.Done()
+				y1 := min(y0+yslice, height)
+				f.Draw(dst, image.Rect(0, y0, width, y1), src, image.Pt(0, y0))
+			}(filter, ypos)
+			ypos += yslice
+		}
+		wg.Wait()
 		src = dst
 	}
 	return dst
 }
 
+// Convert from SRGB to linear color
+func Ungamma(x float64) float64 { return math.Pow(x, 2.2) }
+
 // Apply filter to RGB color of each pixel
-type colorFilter struct{ fn func(float64) float64 }
+type ColorFilter func(float64) float64
 
-func ungamma(x float64) float64 {
-	return math.Pow(x, 2.2)
-}
-
-func (f colorFilter) Draw(dst draw.Image, r image.Rectangle, src image.Image, sp image.Point) {
-	draw.Draw(dst, r, doColorFilter{Image: src, colorFilter: f}, sp, draw.Src)
+func (f ColorFilter) Draw(dst draw.Image, r image.Rectangle, src image.Image, sp image.Point) {
+	draw.Draw(dst, r, doColorFilter{Image: src, ColorFilter: f}, sp, draw.Src)
 }
 
 type doColorFilter struct {
 	image.Image
-	colorFilter
+	ColorFilter
 }
 
 func (f doColorFilter) ColorModel() color.Model { return color.NRGBAModel }
@@ -139,88 +160,138 @@ func (f doColorFilter) At(x, y int) color.Color {
 	ir, ig, ib, ia := f.Image.At(x, y).RGBA()
 	if ia != 0 {
 		fa := float64(ia)
-		c.R = uint8(0xff * f.fn(float64(ir)/fa))
-		c.G = uint8(0xff * f.fn(float64(ig)/fa))
-		c.B = uint8(0xff * f.fn(float64(ib)/fa))
+		c.R = uint8(0xff * f.ColorFilter(float64(ir)/fa))
+		c.G = uint8(0xff * f.ColorFilter(float64(ig)/fa))
+		c.B = uint8(0xff * f.ColorFilter(float64(ib)/fa))
 		c.A = uint8(ia >> 8)
 	}
 	return c
 }
 
 // Apply sobel filter and convert x offset to red channel and y offset to green channel
-type sobelFilter struct{ strength float64 }
+type SobelFilter struct {
+	Strength float64
+	Clamp    bool
+}
 
-func (f sobelFilter) Draw(dst draw.Image, r image.Rectangle, src image.Image, sp image.Point) {
-	draw.Draw(dst, r, doSobelFilter{Image: src, sobelFilter: f, dx: r.Dx(), dy: r.Dy()}, sp, draw.Src)
+func (f SobelFilter) Draw(dst draw.Image, r image.Rectangle, src image.Image, sp image.Point) {
+	draw.Draw(dst, r, doSobelFilter{Image: src, SobelFilter: f}, sp, draw.Src)
 }
 
 type doSobelFilter struct {
 	image.Image
-	sobelFilter
-	dx, dy int
+	SobelFilter
 }
 
 func (f doSobelFilter) ColorModel() color.Model { return color.NRGBAModel }
 
 func (f doSobelFilter) At(x, y int) color.Color {
-	var c color.NRGBA
-	tl, tt, tr := f.level(x-1, y-1), f.level(x, y-1), f.level(x+1, y-1)
-	ll, rr := f.level(x-1, y), f.level(x+1, y)
-	bl, bb, br := f.level(x-1, y+1), f.level(x, y+1), f.level(x+1, y+1)
-	dx := (tr + 2*rr + br) - (tl + 2*ll + bl)
-	dy := (bl + 2*bb + br) - (tl + 2*tt + tr)
-	dz := 1 / f.strength
+	t := intensity(f.Image, x, y-1, f.Clamp)
+	b := intensity(f.Image, x, y+1, f.Clamp)
+	l := intensity(f.Image, x-1, y, f.Clamp)
+	r := intensity(f.Image, x+1, y, f.Clamp)
+	tl := intensity(f.Image, x-1, y-1, f.Clamp)
+	tr := intensity(f.Image, x+1, y-1, f.Clamp)
+	bl := intensity(f.Image, x-1, y+1, f.Clamp)
+	br := intensity(f.Image, x+1, y+1, f.Clamp)
+	dx := (tl + 2*l + bl) - (tr + 2*r + br)
+	dy := (bl + 2*b + br) - (tl + 2*t + tr)
+	dz := 1 / f.Strength
 	norm := 1 / math.Sqrt(dx*dx+dy*dy+dz*dz)
-	c.R = uint8(0xff * (0.5 + 0.5*dx*norm))
-	c.G = uint8(0xff * (0.5 + 0.5*dy*norm))
-	c.B = uint8(0xff * (0.5 + 0.5*dz*norm))
-	c.A = 0xff
-	return c
-}
-
-func (f doSobelFilter) level(x, y int) float64 {
-	ir, ig, ib, ia := f.Image.At((x+f.dx)%f.dx, (y+f.dy)%f.dy).RGBA()
-	return float64(ir+ig+ib) / float64(3*ia)
+	return color.NRGBA{
+		R: uint8(0xff * (0.5 + 0.5*dx*norm)),
+		G: uint8(0xff * (0.5 + 0.5*dy*norm)),
+		B: uint8(0xff * (0.5 + 0.5*dz*norm)),
+		A: 0xff,
+	}
 }
 
 // Apply Gaussian blur to the image
-type blurFilter struct{ radius float64 }
-
-func (f blurFilter) Draw(dst draw.Image, r image.Rectangle, src image.Image, sp image.Point) {
-	rs := int(math.Ceil(f.radius * 2.57))
-	draw.Draw(dst, r, doBlurFilter{Image: src, blurFilter: f, rs: rs, dx: r.Dx(), dy: r.Dy()}, sp, draw.Src)
+type BlurFilter struct {
+	Radius float64
+	Clamp  bool
 }
 
-type doBlurFilter struct {
-	image.Image
-	blurFilter
-	rs, dx, dy int
+// Box blur as per http://blog.ivank.net/fastest-gaussian-blur.html, algorithm 2
+func (f BlurFilter) Draw(dst draw.Image, r image.Rectangle, src image.Image, sp image.Point) {
+	for _, box := range boxesForGauss(f.Radius, 3) {
+		draw.Draw(dst, r, boxBlur{Image: src, BlurFilter: f, rs: box}, sp, draw.Src)
+	}
 }
 
-func (f doBlurFilter) ColorModel() color.Model { return color.NRGBAModel }
-
-func (f doBlurFilter) At(x, y int) color.Color {
-	var c color.NRGBA
-	val := 0.0
-	wsum := 0.0
-	rsq := 2 * f.radius * f.radius
-	for iy := y - f.rs; iy < y+f.rs+1; iy++ {
-		for ix := x - f.rs; ix < x+f.rs+1; ix++ {
-			dsq := float64((ix-x)*(ix-x) + (iy-y)*(iy-y))
-			weight := math.Exp(-dsq/rsq) / (math.Pi * rsq)
-			val += f.level(ix, iy) * weight
-			wsum += weight
+func boxesForGauss(sigma float64, n int) []int {
+	wIdeal := math.Sqrt((12*sigma*sigma/float64(n) + 1))
+	wl := math.Floor(wIdeal)
+	if int(wl)%2 == 0 {
+		wl--
+	}
+	wu := wl + 2
+	nf := float64(n)
+	mIdeal := (12*sigma*sigma - nf*wl*wl - 4*nf*wl - 3*nf) / (-4*wl - 4)
+	m := int(math.Floor(mIdeal + 0.5))
+	sizes := make([]int, n)
+	for i := range sizes {
+		if i < m {
+			sizes[i] = int((wl - 1) / 2)
+		} else {
+			sizes[i] = int((wu - 1) / 2)
 		}
 	}
-	val = math.Min(val/wsum, 1)
-	c.R = uint8(0xff * val)
-	c.G = uint8(0xff * val)
-	c.B = uint8(0xff * val)
-	c.A = 0xff
-	return c
+	return sizes
 }
 
-func (f doBlurFilter) level(x, y int) float64 {
-	ir, ig, ib, ia := f.Image.At((x+f.dx)%f.dx, (y+f.dy)%f.dy).RGBA()
+type boxBlur struct {
+	image.Image
+	BlurFilter
+	rs int
+}
+
+func (f boxBlur) ColorModel() color.Model { return color.Gray16Model }
+
+func (f boxBlur) At(x, y int) color.Color {
+	val := 0.0
+	for iy := y - f.rs; iy < y+f.rs+1; iy++ {
+		for ix := x - f.rs; ix < x+f.rs+1; ix++ {
+			val += intensity(f.Image, ix, iy, f.Clamp)
+		}
+	}
+	val /= float64((2*f.rs + 1) * (2*f.rs + 1))
+	return color.Gray16{uint16(0xffff * val)}
+}
+
+func intensity(img image.Image, x, y int, applyClamp bool) float64 {
+	dx, dy := img.Bounds().Dx(), img.Bounds().Dy()
+	if applyClamp {
+		x = clamp(x, 0, dx-1)
+		y = clamp(y, 0, dy-1)
+	} else {
+		x = (x + dx) % dx
+		y = (y + dy) % dy
+	}
+	ir, ig, ib, ia := img.At(x, y).RGBA()
 	return float64(ir+ig+ib) / float64(3*ia)
+}
+
+func clamp(x, min, max int) int {
+	if x < min {
+		x = min
+	}
+	if x > max {
+		x = max
+	}
+	return x
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }

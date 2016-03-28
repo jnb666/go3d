@@ -52,6 +52,7 @@ varying vec3 CameraSpacePos;
 varying vec2 Texcoord;
 varying vec3 ModelPos;
 varying mat3 TBN;
+varying float HasTangent;
 
 uniform mat4 cameraToClip;
 uniform mat4 modelToCamera;
@@ -65,9 +66,15 @@ void main() {
 	CameraSpacePos = pos.xyz;
 	Texcoord = texcoord;
 	ModelPos = position * modelScale;
-   	vec3 N = normalize(vec3(modelToCamera * vec4(normal, 0.0)));
- 	vec3 T = normalize(vec3(modelToCamera * vec4(tangent, 0.0)));
-   	TBN = mat3(T, cross(T, N), N);
+	if (length(tangent) == 0.0) {
+		HasTangent = 0.0;
+	} else {
+		HasTangent = 1.0;
+	   	vec3 N = normalize(vec3(modelToCamera * vec4(normal, 0.0)));
+ 		vec3 T = normalize(vec3(modelToCamera * vec4(tangent, 0.0)));
+ 		T = normalize(T - dot(T, N) * N);
+   		TBN = mat3(T, cross(T, N), N);
+   	}
 }
 `
 
@@ -308,9 +315,10 @@ uniform sampler2D tex0;	 // diffuse
 uniform sampler2D tex1;	 // specular
 uniform sampler2D tex2;  // normal
 varying mat3 TBN;
+varying float HasTangent;
 
 void main() {
-	vec3 N2 = TBN * normalize(texture2D(tex2,Texcoord).rgb * 2.0 - 1.0);
+	vec3 N2 = (HasTangent == 0.0) ? Normal : TBN * normalize(texture2D(tex2,Texcoord).rgb * 2.0 - 1.0);
 	vec4 C = texture2D(tex0, Texcoord);
 	vec3 spec = (numTex == 2) ? specularColor : texture2D(tex1, Texcoord).rgb * specularColor;
 	vec3 color = blinnPhongLighting(N2, objectColor.rgb*C.rgb, spec);
@@ -322,9 +330,10 @@ uniform samplerCube tex0;  // diffuse
 uniform samplerCube tex1;  // specular
 uniform samplerCube tex2;  // normal
 varying mat3 TBN;
+varying float HasTangent;
 
 void main() {
-	vec3 N2 = TBN * normalize(textureCube(tex2,Texcoord).rgb *2.0 - 1.0);
+	vec3 N2 = (HasTangent == 0.0) ? Normal : TBN * normalize(textureCube(tex2,Texcoord).rgb * 2.0 - 1.0);
 	vec4 C = textureCube(tex0, Texcoord);
 	vec3 spec = (numTex == 2) ? specularColor : textureCube(tex1, ModelPos).rgb * specularColor;	
 	vec3 color = blinnPhongLighting(N2, objectColor.rgb*C.rgb, spec);
