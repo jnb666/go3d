@@ -9,7 +9,6 @@ import (
 	"gopkg.in/qml.v1"
 	"gopkg.in/qml.v1/gl/es2"
 	"os"
-	"sync"
 )
 
 const sceneFile = "shapes.qml"
@@ -38,13 +37,14 @@ type mouseInfo struct {
 type Model struct {
 	qml.Object
 	cameraMode int
+	bumpMap    bool
 	setModel   string
 	modelName  string
-	models     map[string]scene.Object
+	models     map[string]*mesh.Mesh
 	background scene.Object
+	scene      scene.Object
 	view       *scene.View
 	mouse      mouseInfo
-	loading    sync.Mutex
 }
 
 func (t *Model) initialise(gl *GL.GL) {
@@ -53,36 +53,37 @@ func (t *Model) initialise(gl *GL.GL) {
 	t.view = scene.NewView(rotCamera.Clone()).AddLight(light)
 	t.background = scene.NewItem(mesh.Cube().Invert().SetMaterial(mesh.Skybox()))
 	t.background.Scale(40, 40, 40)
-	t.models = map[string]scene.Object{}
+	t.models = map[string]*mesh.Mesh{}
 	t.setModel = "cube"
 	t.loadMesh(t.setModel)
 }
 
 func (t *Model) loadMesh(name string) {
-	if _, loaded := t.models[name]; loaded {
-		t.modelName = name
-		return
+	//fmt.Println("load mesh", name, "bump map =", t.bumpMap)
+	if _, loaded := t.models[name]; !loaded {
+		m, err := mesh.LoadObjFile(meshes[name])
+		if err != nil {
+			fmt.Printf("error loading %s: %v\n", name, err)
+		}
+		t.models[name] = m
 	}
-	fmt.Println("load mesh", name)
-	model, err := mesh.LoadObjFile(meshes[name])
-	if err != nil {
-		fmt.Printf("error loading %s: %v\n", name, err)
-	}
+	model := t.models[name]
+	model.BumpMap(t.bumpMap)
 	switch name {
 	case "cube":
-		t.models[name] = scene.NewItem(model)
+		t.scene = scene.NewItem(model)
 	case "teapot":
-		t.models[name] = scene.NewItem(model).Scale(0.012, 0.012, 0.012).Translate(0, -0.4, 0)
+		t.scene = scene.NewItem(model).Scale(0.012, 0.012, 0.012).Translate(0, -0.4, 0)
 	case "shuttle":
-		t.models[name] = scene.NewGroup().Add(scene.NewItem(model).Scale(0.13, 0.13, 0.13).RotateX(-90))
+		t.scene = scene.NewGroup().Add(scene.NewItem(model).Scale(0.13, 0.13, 0.13).RotateX(-90))
 	case "bunny":
-		t.models[name] = scene.NewItem(model).Scale(0.7, 0.7, 0.7)
+		t.scene = scene.NewItem(model).Scale(0.7, 0.7, 0.7)
 	case "dragon":
-		t.models[name] = scene.NewGroup().Add(scene.NewItem(model).RotateX(-90))
+		t.scene = scene.NewGroup().Add(scene.NewItem(model).RotateX(-90))
 	case "sponza":
-		t.models[name] = scene.NewItem(model).Scale(0.5, 0.5, 0.5).Translate(0.5, -1, 0)
+		t.scene = scene.NewItem(model).Scale(0.5, 0.5, 0.5).Translate(0.5, -1, 0)
 	case "sibenik":
-		t.models[name] = scene.NewItem(model).Scale(0.5, 0.5, 0.5).RotateY(180).Translate(-0.5, 6, 0)
+		t.scene = scene.NewItem(model).Scale(0.5, 0.5, 0.5).RotateY(180).Translate(-0.5, 6, 0)
 	}
 	t.modelName = name
 }
@@ -97,12 +98,19 @@ func (t *Model) SetModel(name string) {
 }
 
 func (t *Model) Spin() {
-	t.models[t.modelName].RotateY(1)
+	t.scene.RotateY(1)
 	t.Call("update")
 }
 
 func (t *Model) SetScenery(on bool) {
 	t.background.Enable(on)
+	t.Call("update")
+}
+
+func (t *Model) EnableBump(on bool) {
+	t.bumpMap = on
+	t.setModel = t.modelName
+	t.modelName = ""
 	t.Call("update")
 }
 
@@ -160,15 +168,8 @@ func (t *Model) Paint(p *qml.Painter) {
 		t.initialise(gl)
 	}
 	if t.setModel != t.modelName {
-		t.loading.Lock()
-		// model loading can take a long time so do it in the background
-		go func() {
-			t.loadMesh(t.setModel)
-			t.loading.Unlock()
-			t.Call("update")
-		}()
+		t.loadMesh(t.setModel)
 	}
-	//fmt.Println("paint", t.modelName)
 	t.view.SetProjection(t.Int("width"), t.Int("height"))
 	glu.Clear(mgl32.Vec4{0.5, 0.5, 1, 1})
 	view := t.view.ViewMatrix()
@@ -177,7 +178,7 @@ func (t *Model) Paint(p *qml.Painter) {
 	if t.background != nil && t.background.Enabled() {
 		t.view.Draw(t.view.CenteredView(), t.background)
 	}
-	t.view.Draw(view, t.models[t.modelName])
+	t.view.Draw(view, t.scene)
 }
 
 func run() error {

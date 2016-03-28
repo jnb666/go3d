@@ -20,6 +20,31 @@ var vertexShader = `
 attribute vec3 position;
 attribute vec3 normal;
 attribute vec2 texcoord;
+
+varying vec3 Normal;
+varying vec3 CameraSpacePos;
+varying vec2 Texcoord;
+varying vec3 ModelPos;
+
+uniform mat4 cameraToClip;
+uniform mat4 modelToCamera;
+uniform mat3 normalModelToCamera;
+uniform vec3 modelScale;
+
+void main() {
+	vec4 pos = modelToCamera * vec4(position, 1.0);
+	gl_Position = cameraToClip * pos;
+	Normal = normalize(normalModelToCamera * normal);
+	CameraSpacePos = pos.xyz;
+	Texcoord = texcoord;
+	ModelPos = position * modelScale;
+}
+`
+
+var vertexShaderTBN = `
+attribute vec3 position;
+attribute vec3 normal;
+attribute vec2 texcoord;
 attribute vec3 tangent;
 
 varying vec3 Normal;
@@ -42,8 +67,7 @@ void main() {
 	ModelPos = position * modelScale;
    	vec3 N = normalize(vec3(modelToCamera * vec4(normal, 0.0)));
  	vec3 T = normalize(vec3(modelToCamera * vec4(tangent, 0.0)));
- 	vec3 B = cross(T, N);
-   	TBN = mat3(T, B, N);
+   	TBN = mat3(T, cross(T, N), N);
 }
 `
 
@@ -71,7 +95,6 @@ varying vec3 Normal;
 varying vec3 CameraSpacePos;
 varying vec2 Texcoord;
 varying vec3 ModelPos;
-varying mat3 TBN;
 
 #define MAX_LIGHTS 4
 #define GAMMA 2.2
@@ -284,13 +307,12 @@ void main() {
 uniform sampler2D tex0;	 // diffuse
 uniform sampler2D tex1;	 // specular
 uniform sampler2D tex2;  // normal
+varying mat3 TBN;
 
 void main() {
-	vec3 N2 = texture2D(tex2, Texcoord).rgb;
-	N2 = normalize(N2*2.0 - 1.0);
-	N2 = normalize(TBN * N2);
+	vec3 N2 = TBN * normalize(texture2D(tex2,Texcoord).rgb * 2.0 - 1.0);
 	vec4 C = texture2D(tex0, Texcoord);
-	vec3 spec = texture2D(tex1, Texcoord).rgb * specularColor;
+	vec3 spec = (numTex == 2) ? specularColor : texture2D(tex1, Texcoord).rgb * specularColor;
 	vec3 color = blinnPhongLighting(N2, objectColor.rgb*C.rgb, spec);
 	gammaCorrect(vec4(color, objectColor.a*C.a));
 }
@@ -299,13 +321,12 @@ void main() {
 uniform samplerCube tex0;  // diffuse
 uniform samplerCube tex1;  // specular
 uniform samplerCube tex2;  // normal
+varying mat3 TBN;
 
 void main() {
-	vec3 N2 = textureCube(tex2, Texcoord).rgb;
-	N2 = normalize(N2*2.0 - 1.0);
-	N2 = normalize(TBN * N2);
+	vec3 N2 = TBN * normalize(textureCube(tex2,Texcoord).rgb *2.0 - 1.0);
 	vec4 C = textureCube(tex0, Texcoord);
-	vec3 spec = textureCube(tex1, Texcoord).rgb * specularColor;
+	vec3 spec = (numTex == 2) ? specularColor : textureCube(tex1, ModelPos).rgb * specularColor;	
 	vec3 color = blinnPhongLighting(N2, objectColor.rgb*C.rgb, spec);
 	gammaCorrect(vec4(color, objectColor.a*C.a));
 }

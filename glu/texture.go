@@ -1,30 +1,12 @@
 package glu
 
 import (
-	"fmt"
+	"github.com/jnb666/go3d/img"
 	"gopkg.in/qml.v1/gl/es2"
 	"gopkg.in/qml.v1/gl/glbase"
-	"image"
-	"image/color"
-	"image/draw"
-	"image/jpeg"
-	"image/png"
 	"io"
-	"math"
 	"os"
-	"path"
-	"strings"
 )
-
-type ImageFormat int
-
-const (
-	UnknownFormat ImageFormat = iota
-	PngFormat
-	JpegFormat
-)
-
-const gamma = 2.2
 
 // Texture interface type
 type Texture interface {
@@ -36,11 +18,10 @@ type Texture2D struct{ *textureBase }
 
 // NewTexture2D creates a new 2D opengl texture. If srgba is set then it is converted to linear RGB space.
 // If clamp is set then clamp to edge, else will wrap texture.
-func NewTexture2D(clamp, srgba bool) Texture2D {
+func NewTexture2D(clamp bool) Texture2D {
 	t := &textureBase{
-		typ:   GL.TEXTURE_2D,
-		tex:   gl.GenTextures(1),
-		srgba: srgba,
+		typ: GL.TEXTURE_2D,
+		tex: gl.GenTextures(1),
 	}
 	gl.BindTexture(GL.TEXTURE_2D, t.tex[0])
 	if clamp {
@@ -58,18 +39,18 @@ func NewTexture2D(clamp, srgba bool) Texture2D {
 }
 
 // SetImageFile loads an image from a file
-func (t Texture2D) SetImageFile(file string) (Texture2D, error) {
+func (t Texture2D) SetImageFile(file string, conv img.ImageConvert) (Texture2D, error) {
 	r, err := os.Open(file)
 	if err != nil {
 		return t, err
 	}
 	defer r.Close()
-	return t.SetImage(r, GetFormat(file))
+	return t.SetImage(r, conv)
 }
 
 // SetImage loads an image from an io.Reader
-func (t Texture2D) SetImage(r io.Reader, format ImageFormat) (Texture2D, error) {
-	pix, bounds, err := getImage(r, format, t.srgba)
+func (t Texture2D) SetImage(r io.Reader, conv img.ImageConvert) (Texture2D, error) {
+	pix, bounds, err := img.Decode(r, conv)
 	if err != nil {
 		return t, err
 	}
@@ -85,11 +66,10 @@ func (t Texture2D) SetImage(r io.Reader, format ImageFormat) (Texture2D, error) 
 type TextureCube struct{ *textureBase }
 
 // NewTextureCube creates a new cubemap texture. If srgba is set then it is converted to linear RGB space.
-func NewTextureCube(srgba bool) TextureCube {
+func NewTextureCube() TextureCube {
 	t := &textureBase{
-		typ:   GL.TEXTURE_CUBE_MAP,
-		tex:   gl.GenTextures(1),
-		srgba: srgba,
+		typ: GL.TEXTURE_CUBE_MAP,
+		tex: gl.GenTextures(1),
 	}
 	gl.BindTexture(t.typ, t.tex[0])
 	gl.TexParameteri(t.typ, GL.TEXTURE_WRAP_S, GL.CLAMP_TO_EDGE)
@@ -102,19 +82,19 @@ func NewTextureCube(srgba bool) TextureCube {
 }
 
 // SetImageFile loads an image from a file.  The index is the number of the image in the cubemap.
-func (t TextureCube) SetImageFile(file string, index int) (TextureCube, error) {
+func (t TextureCube) SetImageFile(file string, conv img.ImageConvert, index int) (TextureCube, error) {
 	r, err := os.Open(file)
 	if err != nil {
 		return t, err
 	}
 	defer r.Close()
-	return t.SetImage(r, GetFormat(file), index)
+	return t.SetImage(r, conv, index)
 }
 
 // SetImage loads an image, if srgba is set then it is converted to linear RGB space.
 // The index is the number of the image in the cubemap.
-func (t TextureCube) SetImage(r io.Reader, format ImageFormat, index int) (TextureCube, error) {
-	pix, bounds, err := getImage(r, format, t.srgba)
+func (t TextureCube) SetImage(r io.Reader, conv img.ImageConvert, index int) (TextureCube, error) {
+	pix, bounds, err := img.Decode(r, conv)
 	if err != nil {
 		return t, err
 	}
@@ -146,18 +126,18 @@ func NewTexture3D() Texture3D {
 }
 
 // SetImageFile loads an image from a file
-func (t Texture3D) SetImageFile(file string, dims []int) (Texture3D, error) {
+func (t Texture3D) SetImageFile(file string, conv img.ImageConvert, dims []int) (Texture3D, error) {
 	r, err := os.Open(file)
 	if err != nil {
 		return t, err
 	}
 	defer r.Close()
-	return t.SetImage(r, GetFormat(file), dims)
+	return t.SetImage(r, conv, dims)
 }
 
 // SetImage loads an image. dims is required to set the x,y,z mapping.
-func (t Texture3D) SetImage(r io.Reader, format ImageFormat, dims []int) (Texture3D, error) {
-	pix, _, err := getImage(r, format, t.srgba)
+func (t Texture3D) SetImage(r io.Reader, conv img.ImageConvert, dims []int) (Texture3D, error) {
+	pix, _, err := img.Decode(r, conv)
 	if err != nil {
 		return t, err
 	}
@@ -171,10 +151,9 @@ func (t Texture3D) SetImage(r io.Reader, format ImageFormat, dims []int) (Textur
 
 // base type for all textures
 type textureBase struct {
-	typ   glbase.Enum
-	tex   []glbase.Texture
-	dims  []int
-	srgba bool
+	typ  glbase.Enum
+	tex  []glbase.Texture
+	dims []int
 }
 
 func (t *textureBase) Activate(id int) {
@@ -187,97 +166,4 @@ func (t *textureBase) Activate(id int) {
 
 func (t *textureBase) Dims() []int {
 	return t.dims
-}
-
-// derive image format from file extension
-func GetFormat(name string) ImageFormat {
-	switch path.Ext(name) {
-	case ".png":
-		return PngFormat
-	case ".jpg", ".jpeg":
-		return JpegFormat
-	}
-	return UnknownFormat
-}
-
-// get an image in NRGBA format
-func getImage(r io.Reader, format ImageFormat, hasGamma bool) (pix []uint8, bounds image.Rectangle, err error) {
-	// did we save a copy before?
-	var tempfile string
-	if f, ok := r.(*os.File); ok {
-		base := strings.Split(path.Base(f.Name()), ".")[0]
-		tempfile = path.Join(os.TempDir(), base+"_rgb.png")
-		if tmp, err := os.Open(tempfile); err == nil {
-			// check timestamp
-			fstat, _ := f.Stat()
-			tstat, _ := tmp.Stat()
-			if tstat.ModTime().After(fstat.ModTime()) {
-				r = tmp
-				format = PngFormat
-				hasGamma = false
-			}
-		}
-	}
-	var img image.Image
-	switch format {
-	case UnknownFormat:
-		err = fmt.Errorf("unsupported image format")
-	case PngFormat:
-		img, err = png.Decode(r)
-	case JpegFormat:
-		img, err = jpeg.Decode(r)
-	}
-	if err != nil {
-		return
-	}
-	// shortcut if already in suitable format
-	bounds = img.Bounds()
-	if hasGamma == false {
-		switch t := img.(type) {
-		case *image.NRGBA:
-			pix = t.Pix
-			return
-		case *image.RGBA:
-			pix = t.Pix
-			return
-		}
-	}
-	dst := image.NewNRGBA(bounds)
-	if hasGamma {
-		img = &ToNRGBA{img}
-	}
-	draw.Draw(dst, bounds, img, image.ZP, draw.Src)
-	pix = dst.Pix
-	// save a copy of the output image
-	if tempfile != "" {
-		if out, err := os.Create(tempfile); err == nil {
-			fmt.Printf("save converted image copy as %s\n", tempfile)
-			png.Encode(out, dst)
-			out.Close()
-		}
-	}
-	return pix, bounds, nil
-}
-
-// image converter to linearise image which is in srgba format
-type ToNRGBA struct {
-	image.Image
-}
-
-func (t *ToNRGBA) ColorModel() color.Model {
-	return color.NRGBAModel
-}
-
-func (t *ToNRGBA) At(x, y int) color.Color {
-	ir, ig, ib, ia := t.Image.At(x, y).RGBA()
-	if ia == 0 {
-		return color.NRGBA{}
-	}
-	fa := float64(ia)
-	return color.NRGBA{
-		R: uint8(0xff * math.Pow(float64(ir)/fa, gamma)),
-		G: uint8(0xff * math.Pow(float64(ig)/fa, gamma)),
-		B: uint8(0xff * math.Pow(float64(ib)/fa, gamma)),
-		A: uint8(ia >> 8),
-	}
 }

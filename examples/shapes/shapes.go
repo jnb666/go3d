@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/jnb666/go3d/glu"
+	"github.com/jnb666/go3d/img"
 	"github.com/jnb666/go3d/mesh"
 	"github.com/jnb666/go3d/scene"
 	"gopkg.in/qml.v1"
@@ -42,13 +43,13 @@ func (t *Shapes) initialise() {
 	t.view = scene.NewView(camera).AddLight(light)
 
 	fmt.Println("load gopher texture")
-	tex2d, err := glu.NewTexture2D(false, false).SetImageFile("gopher_rgb.png")
+	tex2d, err := glu.NewTexture2D(false).SetImageFile("gopher.png", img.SRGBToLinear)
 	if err != nil {
 		panic(err)
 	}
-	texCube := glu.NewTextureCube(false)
+	texCube := glu.NewTextureCube()
 	for i := 0; i < 6; i++ {
-		texCube.SetImageFile("gopher_rgb.png", i)
+		texCube.SetImageFile("gopher.png", img.SRGBToLinear, i)
 	}
 	t.background = scene.NewItem(mesh.Cube().Invert()).SetMaterial(mesh.Skybox())
 	t.background.Enable(false).Scale(10, 10, 10)

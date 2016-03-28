@@ -22,7 +22,7 @@ ApplicationWindow {
                 onCurrentIndexChanged: model.setLighting(currentText)
             }
             ComboBox {
-                model: ["brick", "shield"]
+                model: ["brick", "shield", "stone"]
                 onCurrentIndexChanged: model.setTexture(currentText)
             }
         }

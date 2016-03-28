@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/jnb666/go3d/glu"
+	"github.com/jnb666/go3d/img"
 	"github.com/jnb666/go3d/mesh"
 	"github.com/jnb666/go3d/scene"
 	"gopkg.in/qml.v1"
@@ -72,7 +73,7 @@ func (t *GopherCube) initGL(gl *GL.GL) scene.Object {
 
 	// load texture
 	fmt.Println("load gopher texture")
-	tex, err := glu.NewTexture2D(false, true).SetImageFile("gopher.png")
+	tex, err := glu.NewTexture2D(false).SetImageFile("gopher2.png", img.SRGBToLinear)
 	if err != nil {
 		panic(err)
 	}

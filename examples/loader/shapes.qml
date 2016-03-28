@@ -22,6 +22,10 @@ ApplicationWindow {
                 onClicked: model.setScenery(checked)
             }
             Button {
+                text: "bump maps"; checkable: true; checked: false
+                onClicked: model.enableBump(checked)
+            }
+            Button {
                 text: "reset" 
                 onClicked: { model.reset(); move.running = false; moveButton.checked = false }
             }

@@ -6,6 +6,7 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/jnb666/go3d/assets"
 	"github.com/jnb666/go3d/glu"
+	"github.com/jnb666/go3d/img"
 	"io"
 	"strconv"
 	"strings"
@@ -63,18 +64,18 @@ var (
 )
 
 // Get material by name
-func LoadMaterial(name string) (mtl Material, err error) {
-	name = strings.ToLower(name)
+func LoadMaterial(name string, bumpMap bool) (mtl Material, err error) {
+	cname := fmt.Sprintf("%s:%v", strings.ToLower(name), bumpMap)
 	var ok bool
-	if mtl, ok = mtlCache[name]; ok {
+	if mtl, ok = mtlCache[cname]; ok {
 		return mtl, nil
 	}
 	if data, ok := mtlDataCache[name]; ok {
-		mtl, err = data.toMaterial()
+		mtl, err = data.toMaterial(bumpMap)
 		if err != nil {
 			return nil, err
 		}
-		mtlCache[name] = mtl
+		mtlCache[cname] = mtl
 		return mtl, nil
 	}
 	switch name {
@@ -111,10 +112,19 @@ func saveMaterialData(m *mtlData) {
 	mtlDataCache[strings.ToLower(m.name)] = *m
 }
 
+func ntex(tex []glu.Texture) (n int) {
+	for _, t := range tex {
+		if t != nil {
+			n++
+		}
+	}
+	return n
+}
+
 // Unshaded colored material with optional texture
 func Unshaded(tex ...glu.Texture) Material {
 	m := newMaterial(glu.White)
-	if len(tex) == 0 {
+	if ntex(tex) == 0 {
 		m.prog = getProgram(mUnshaded)
 	} else {
 		switch tex[0].(type) {
@@ -152,7 +162,7 @@ func Skybox() Material {
 // Diffuse colored material with optional texture
 func Diffuse(tex ...glu.Texture) Material {
 	m := newMaterial(glu.White)
-	if len(tex) == 0 {
+	if ntex(tex) == 0 {
 		m.prog = getProgram(mDiffuse)
 	} else {
 		switch tex[0].(type) {
@@ -178,7 +188,7 @@ type reflective struct {
 // tex paramater is optional list of associated textures for diffuse, specular and normal map.
 func Reflective(specular mgl32.Vec4, shininess float32, tex ...glu.Texture) Material {
 	m := newMaterial(glu.White)
-	if len(tex) == 0 {
+	if ntex(tex) == 0 {
 		m.prog = getProgram(mBlinnPhong)
 	} else {
 		switch tex[0].(type) {
@@ -325,10 +335,12 @@ func (m *baseMaterial) Enable() *glu.Program {
 	m.prog.Use()
 	m.prog.Set("objectColor", m.color)
 	m.prog.Set("ambientScale", m.ambient)
-	m.prog.Set("numTex", len(m.tex))
+	m.prog.Set("numTex", ntex(m.tex))
 	for i, tex := range m.tex {
-		tex.Activate(i)
-		m.prog.Set("tex"+strconv.Itoa(i), i)
+		if tex != nil {
+			tex.Activate(i)
+			m.prog.Set("tex"+strconv.Itoa(i), i)
+		}
 	}
 	return m.prog
 }
@@ -365,9 +377,12 @@ func getProgram(id int) *glu.Program {
 	}
 	var prog *glu.Program
 	var err error
-	if id == mPointShader {
+	switch id {
+	case mBlinnPhongTexNorm, mBlinnPhongCubeNorm:
+		prog, err = glu.NewProgram(vertexShaderTBN, fragmentShader[id], vertexLayoutTBN, vertexSize)
+	case mPointShader:
 		prog, err = glu.NewProgram(vertexShaderPoints, fragmentShader[id], vertexLayoutPoints, vertexSize)
-	} else {
+	default:
 		prog, err = glu.NewProgram(vertexShader, fragmentShader[id], vertexLayout, vertexSize)
 	}
 	if err != nil {
@@ -405,13 +420,13 @@ func getTexture(id int) glu.Texture {
 	var err error
 	switch id {
 	case tWood:
-		tex, err = glu.NewTexture2D(false, false).SetImage(getImage("wood.png"), glu.PngFormat)
+		tex, err = glu.NewTexture2D(false).SetImage(getImage("wood.png"), img.NoConvert)
 	case tTurbulence:
-		tex, err = glu.NewTexture3D().SetImage(getImage("turbulence3.png"), glu.PngFormat, []int{64, 64, 64})
+		tex, err = glu.NewTexture3D().SetImage(getImage("turbulence3.png"), img.NoConvert, []int{64, 64, 64})
 	case tMetallic:
-		tex, err = glu.NewTexture2D(false, false).SetImage(getImage("metallic.png"), glu.PngFormat)
+		tex, err = glu.NewTexture2D(false).SetImage(getImage("metallic.png"), img.NoConvert)
 	case tMetallicSpec:
-		tex, err = glu.NewTexture2D(false, false).SetImage(getImage("metallic_spec.png"), glu.PngFormat)
+		tex, err = glu.NewTexture2D(false).SetImage(getImage("metallic_spec.png"), img.NoConvert)
 	case tEarth:
 		tex, err = textureCube("earth")
 	case tEarthSpec:
@@ -429,10 +444,10 @@ func getTexture(id int) glu.Texture {
 }
 
 func textureCube(baseFile string) (glu.Texture, error) {
-	tex := glu.NewTextureCube(false)
+	tex := glu.NewTextureCube()
 	for i, side := range []string{"posx", "negx", "posy", "negy", "posz", "negz"} {
-		img := getImage(baseFile + "_" + side + ".png")
-		if _, err := tex.SetImage(img, glu.PngFormat, i); err != nil {
+		image := getImage(baseFile + "_" + side + ".png")
+		if _, err := tex.SetImage(image, img.NoConvert, i); err != nil {
 			return tex, err
 		}
 	}

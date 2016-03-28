@@ -11,11 +11,17 @@ import (
 
 const vertexSize = 11
 
-var vertexLayout = []glu.Attrib{
+var vertexLayoutTBN = []glu.Attrib{
 	{Name: "position", Size: 3, Offset: 0},
 	{Name: "normal", Size: 3, Offset: 3},
 	{Name: "texcoord", Size: 2, Offset: 6},
 	{Name: "tangent", Size: 3, Offset: 8},
+}
+
+var vertexLayout = []glu.Attrib{
+	{Name: "position", Size: 3, Offset: 0},
+	{Name: "normal", Size: 3, Offset: 3},
+	{Name: "texcoord", Size: 2, Offset: 6},
 }
 
 var vertexLayoutPoints = []glu.Attrib{
@@ -46,6 +52,7 @@ type Mesh struct {
 	elements  []el2
 	ncache    normalCache
 	pointSize int
+	bumpMap   bool
 }
 
 type meshGroup struct {
@@ -63,7 +70,7 @@ type normalCache struct {
 
 // NewMesh creates a new empty mesh structure
 func New() *Mesh {
-	return &Mesh{ncache: newNormalCache(true), groups: []*meshGroup{}}
+	return &Mesh{ncache: newNormalCache(true), groups: []*meshGroup{}, bumpMap: true}
 }
 
 func newNormalCache(smooth bool) normalCache {
@@ -120,10 +127,34 @@ func (m *Mesh) AddTexCoord(tx, ty float32) int {
 
 // Add a triangular or a quad face
 func (m *Mesh) AddFace(el ...El) int {
+	calcNormal := false
+	vtx := make([]mgl32.Vec3, len(el))
+	for i, e := range el {
+		if e.Norm == 0 {
+			calcNormal = true
+		}
+		vtx[i] = m.vertex(e.Vert)
+	}
 	switch len(el) {
 	case 3:
+		if calcNormal {
+			normal := vtx[1].Sub(vtx[0]).Cross(vtx[2].Sub(vtx[0]))
+			m.ncache.add(normal.Normalize(), len(m.elements), el)
+		}
 		m.addTriangleFace(el[0], el[1], el[2])
 	case 4:
+		if calcNormal {
+			normal := mgl32.Vec3{}
+			for i, v := range vtx {
+				v1 := vtx[(i+1)%4]
+				normal = normal.Add(mgl32.Vec3{
+					(v[1] - v1[1]) * (v[2] + v1[2]),
+					(v[2] - v1[2]) * (v[0] + v1[0]),
+					(v[0] - v1[0]) * (v[1] + v1[1]),
+				})
+			}
+			m.ncache.add(normal.Normalize(), len(m.elements), []El{el[0], el[1], el[2], el[2], el[3], el[0]})
+		}
 		m.addTriangleFace(el[0], el[1], el[2])
 		m.addTriangleFace(el[2], el[3], el[0])
 	default:
@@ -135,13 +166,6 @@ func (m *Mesh) AddFace(el ...El) int {
 func (m *Mesh) addTriangleFace(elem ...El) {
 	v0, v1, v2 := m.vertex(elem[0].Vert), m.vertex(elem[1].Vert), m.vertex(elem[2].Vert)
 	edge1, edge2 := v1.Sub(v0), v2.Sub(v0)
-
-	// calculate face normal
-	if elem[0].Norm == 0 || elem[1].Norm == 0 || elem[2].Norm == 0 {
-		normal := edge1.Cross(edge2).Normalize()
-		m.ncache.add(normal, len(m.elements), elem)
-	}
-
 	// calculate tangent vector
 	ntangent := 0
 	if elem[0].Tex != 0 && elem[1].Tex != 0 && elem[2].Tex != 0 {
@@ -156,7 +180,6 @@ func (m *Mesh) addTriangleFace(elem ...El) {
 		m.tangents = append(m.tangents, tangent)
 		ntangent = len(m.tangents)
 	}
-
 	// add to elements array
 	elem2 := make([]el2, 3)
 	for i, el := range elem {
@@ -220,10 +243,10 @@ func (m *Mesh) Build(materialName string) {
 	m.elements = nil
 }
 
-func (m *Mesh) loadMaterials() (err error) {
+func (m *Mesh) loadMaterials(force bool) (err error) {
 	for _, grp := range m.groups {
-		if grp.mtl == nil {
-			if grp.mtl, err = LoadMaterial(grp.mtlName); err != nil {
+		if grp.mtl == nil || force {
+			if grp.mtl, err = LoadMaterial(grp.mtlName, m.bumpMap); err != nil {
 				return err
 			}
 		}
@@ -231,10 +254,16 @@ func (m *Mesh) loadMaterials() (err error) {
 	return nil
 }
 
+// Enable or disable normal mapping
+func (m *Mesh) BumpMap(on bool) {
+	m.bumpMap = on
+	m.loadMaterials(true)
+}
+
 // Draw method draws the mesh by calling GL DrawElements, setUniforms callback can be used to set uniforms after
 // binding the vertex arrays and enabling the shaders, but prior to drawing.
 func (m *Mesh) Draw(setUniforms func(*glu.Program)) error {
-	if err := m.loadMaterials(); err != nil {
+	if err := m.loadMaterials(false); err != nil {
 		return err
 	}
 	if m.varray[m.inverted] == nil {
@@ -279,7 +308,7 @@ func (m *Mesh) Material() Material {
 	if len(m.groups) == 0 {
 		return nil
 	}
-	if err := m.loadMaterials(); err != nil {
+	if err := m.loadMaterials(false); err != nil {
 		return nil
 	}
 	return m.groups[0].mtl

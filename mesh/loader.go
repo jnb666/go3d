@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/jnb666/go3d/glu"
+	"github.com/jnb666/go3d/img"
 	"io"
 	"os"
 	"path"
@@ -177,7 +178,9 @@ func LoadMtl(r io.Reader) (names []string, err error) {
 			m.diffMap = fullPath(flds[1])
 		case "map_Ks":
 			m.specMap = fullPath(flds[1])
-		case "bump", "map_bump": // TODO
+		case "map_bump", "bump":
+			m.bumpMap = fullPath(flds[1])
+		case "map_Ns", "map_d": // TODO
 		default:
 			fmt.Printf("LoadMtl: skip %s\n", line)
 		}
@@ -207,6 +210,7 @@ type mtlData struct {
 	model     int
 	diffMap   string
 	specMap   string
+	bumpMap   string
 }
 
 // new material with sensible defaults
@@ -222,25 +226,15 @@ func newMtlData(name string) *mtlData {
 	}
 }
 
-func (m mtlData) toMaterial() (mtl Material, err error) {
-	var textures []glu.Texture
-	if m.diffMap != "" {
-		if tex, err := glu.NewTexture2D(false, true).SetImageFile(m.diffMap); err == nil {
-			textures = append(textures, tex)
-		} else {
-			return nil, fmt.Errorf("toMaterial: error loading diffuse map for material %s: %s", m.name, err)
-		}
-		if m.model >= 2 && m.specMap != "" {
-			if tex, err := glu.NewTexture2D(false, true).SetImageFile(m.specMap); err == nil {
-				textures = append(textures, tex)
-				m.specular = mgl32.Vec3{1, 1, 1}
-			} else {
-				return nil, fmt.Errorf("toMaterial: error loading specular map for material %s: %s", m.name, err)
-			}
-		}
-	}
+func (m mtlData) toMaterial(bumpMap bool) (mtl Material, err error) {
 	color := m.diffuse.Vec4(m.alpha)
 	ambScale := m.ambient.Vec4(1).Len() / m.diffuse.Vec4(1).Len()
+	var textures []glu.Texture
+	if m.diffMap != "" {
+		if textures, err = addTexture(0, textures, m.diffMap, img.SRGBToLinear); err != nil {
+			return nil, err
+		}
+	}
 	switch m.model {
 	case 0:
 		ambScale = 0
@@ -248,10 +242,32 @@ func (m mtlData) toMaterial() (mtl Material, err error) {
 	case 1:
 		mtl = Diffuse(textures...)
 	default:
+		if m.specMap != "" {
+			if textures, err = addTexture(1, textures, m.specMap, img.NoConvert); err != nil {
+				return nil, err
+			}
+			m.specular = mgl32.Vec3{1, 1, 1}
+		}
+		if bumpMap && m.bumpMap != "" {
+			if textures, err = addTexture(2, textures, m.bumpMap, img.BumpToNormal); err != nil {
+				return nil, err
+			}
+		}
 		mtl = Reflective(m.specular.Vec4(m.alpha), m.shininess, textures...)
 	}
 	mtl.SetColor(color).SetAmbient(ambScale)
 	return mtl, nil
+}
+
+func addTexture(pos int, textures []glu.Texture, path string, conv img.ImageConvert) ([]glu.Texture, error) {
+	for len(textures) < pos {
+		textures = append(textures, nil)
+	}
+	tex, err := glu.NewTexture2D(false).SetImageFile(path, conv)
+	if err != nil {
+		return nil, fmt.Errorf("toMaterial: error loading texture %s: %s", path, err)
+	}
+	return append(textures, tex), nil
 }
 
 func parse3fv(flds []string) (v mgl32.Vec3) {
