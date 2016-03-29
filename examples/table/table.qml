@@ -23,12 +23,21 @@ ApplicationWindow {
                 text: "table"; checkable: true; checked: true
                 onClicked: scene.showTable(checked)
             }
+             ToolButton {
+                text: "animate"; checkable: true
+                onClicked: anim.running = checked
+            }
         }
     }
 
     Scene {
         id: scene
         anchors.fill: parent
+         Timer {
+            id: anim
+            interval: 20; running: false; repeat: true
+            onTriggered: scene.animate(0.02)
+        }
         MouseArea {
             anchors.fill: parent
             onWheel: scene.zoom(wheel.angleDelta.y)         

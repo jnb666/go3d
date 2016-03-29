@@ -61,7 +61,7 @@ func Decode(r io.Reader, mode ImageConvert) ([]uint8, image.Rectangle, error) {
 	case SRGBToLinear:
 		conv.Add(ColorFilter(Ungamma))
 	case BumpToNormal:
-		conv.Add(BlurFilter{Radius: 1.5, Clamp: true}, SobelFilter{Strength: 1.25, Clamp: true})
+		conv.Add(BlurFilter{Radius: 1.5}, SobelFilter{Strength: 1.25})
 	default:
 		panic("unknown conversion mode!")
 	}
